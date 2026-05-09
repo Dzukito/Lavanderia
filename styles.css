@@ -138,3 +138,25 @@ tr:hover td { background: #f8fbff; }
   .hero-card { align-items: stretch; flex-direction: column; }
   .timeline-grid { min-width: 900px; }
 }
+
+.location-button { color: inherit; cursor: pointer; display: grid; font: inherit; text-align: left; width: 100%; }
+.location-button strong, .location-button span, .location-button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copy-row { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.preview-box { margin-top: 12px; }
+.week-input { max-width: 180px; }
+.report-panel { border-top: 8px solid var(--primary); }
+.report-metrics { margin-bottom: 16px; }
+.mini-metric { background: #f8fbff; border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+.mini-metric span { color: var(--muted); font-weight: 900; }
+.mini-metric strong { display: block; font-size: 26px; margin-top: 6px; }
+.bar-list { display: grid; gap: 12px; margin-bottom: 18px; }
+.bar-row { display: grid; gap: 8px; grid-template-columns: minmax(180px, 260px) 1fr; }
+.bar-row small { color: var(--muted); display: block; }
+.bars { align-content: center; display: grid; gap: 5px; }
+.bar { border-radius: 999px; display: block; height: 12px; min-width: 4px; }
+.bar.income { background: var(--accent); }
+.bar.expense { background: var(--danger); }
+
+@media (max-width: 920px) {
+  .copy-row, .bar-row { grid-template-columns: 1fr; }
+}

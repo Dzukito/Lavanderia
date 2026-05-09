@@ -8,11 +8,13 @@ const defaultData = {
     dryingMinutes: 50,
     smallWashers: 4,
     dryers: 6,
+    whatsappReceivedMessage: "Hola {cliente}. Recibimos tu pedido #{pedido}. Te avisamos cuando esté listo. Gracias.",
+    whatsappWorkingMessage: "Hola {cliente}. Tu pedido #{pedido} ya está en proceso. Estimamos finalizarlo aproximadamente a las {estimado}.",
     whatsappMessage: "Hola {cliente}. Tu pedido #{pedido} de la lavandería ya está listo para retirar. Te esperamos hasta las 19:00. Gracias.",
     whatsappRetiredMessage: "Hola {cliente}. Dejamos constancia de que el pedido #{pedido} fue retirado el {fecha}. Muchas gracias.",
     whatsappRetiredPaidMessage: "Hola {cliente}. Dejamos constancia de que el pedido #{pedido} fue retirado y abonado el {fecha}. Muchas gracias.",
     storageNoticeDays: 30,
-    storageNoticeText: "Importante: de acuerdo con las condiciones informadas al recibir el pedido y el deber de información clara de la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días desde el aviso de listo podrán considerarse en guarda con cargo y/o destinarse a donación previa comunicación al cliente. Validar el texto definitivo con asesoría legal/local.",
+    storageNoticeText: "Condiciones de guarda: conforme las condiciones informadas al momento de recepción y el deber de información clara previsto por la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días corridos desde el aviso de disponibilidad podrán generar cargos de guarda y/o ser derivados a donación previa comunicación fehaciente al cliente. Texto sujeto a validación legal local.",
     cashPin: "1234",
   },
   services: [
@@ -28,12 +30,27 @@ const defaultData = {
   ],
   orders: [],
   cash: [],
-  locations: ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4"].map((code, index) => ({ id: index + 1, code })),
+  locations: ["A", "B", "C", "D", "E", "F"].flatMap((row) => Array.from({ length: 6 }, (_, index) => `${row}${index + 1}`)).map((code, index) => ({ id: index + 1, code })),
 };
 
 let state = loadState();
 let currentView = "dashboard";
 let cashUnlocked = false;
+let scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
+let schedulePreview = null;
+
+function mergeLocations(defaultLocations, savedLocations = []) {
+  const byCode = new Map([...defaultLocations, ...(savedLocations || [])].map((location, index) => [location.code, { id: index + 1, code: location.code }]));
+  return [...byCode.values()].map((location, index) => ({ ...location, id: index + 1 }));
+}
+
+function currentWeekStart(reference) {
+  const day = reference.getDay() || 7;
+  const monday = new Date(reference);
+  monday.setDate(reference.getDate() - day + 1);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
 
 function loadState() {
   const defaults = structuredClone(defaultData);
@@ -56,7 +73,7 @@ function loadState() {
     clients: parsed.clients?.length ? parsed.clients : defaults.clients,
     orders: parsed.orders || defaults.orders,
     cash: parsed.cash || defaults.cash,
-    locations: parsed.locations?.length ? parsed.locations : defaults.locations,
+    locations: mergeLocations(defaults.locations, parsed.locations),
   };
 
   merged.clients = merged.clients.map((client) => ({ authorizedPickups: "", ...client }));
@@ -141,10 +158,7 @@ function createOrderSchedule(service, createdAt) {
 }
 
 function currentWeekDays(reference = new Date()) {
-  const day = reference.getDay() || 7;
-  const monday = new Date(reference);
-  monday.setDate(reference.getDate() - day + 1);
-  monday.setHours(0, 0, 0, 0);
+  const monday = currentWeekStart(reference);
   return Array.from({ length: 5 }, (_, index) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + index);
@@ -195,6 +209,8 @@ function monthlyCashSummary() {
 
 function messageForOrder(order, type) {
   const templates = {
+    received: state.settings.whatsappReceivedMessage,
+    working: state.settings.whatsappWorkingMessage,
     ready: state.settings.whatsappMessage,
     retired: state.settings.whatsappRetiredMessage,
     retiredPaid: state.settings.whatsappRetiredPaidMessage,
@@ -203,6 +219,7 @@ function messageForOrder(order, type) {
     .replaceAll("{cliente}", orderClient(order))
     .replaceAll("{pedido}", order.number)
     .replaceAll("{fecha}", formatDateTime(new Date().toISOString()))
+    .replaceAll("{estimado}", formatDateTime(order.estimate))
     .replaceAll("{total}", money(order.total));
 }
 
@@ -215,7 +232,6 @@ function render() {
   renderSchedule();
   renderStorage();
   renderCash();
-  renderReports();
   renderSettings();
 }
 
@@ -236,8 +252,12 @@ document.addEventListener("click", (event) => {
     editClient: () => openClientModal(id),
     editOrderStatus: () => openOrderStatusModal(id),
     whatsapp: () => openWhatsappMenu(id),
-    copyWhatsapp: () => copyWhatsapp(id),
     storageNotice: () => openStorageNoticeModal(id),
+    openStorageOrder: () => openStorageOrder(id),
+    prevWeek: () => moveScheduleWeek(-7),
+    nextWeek: () => moveScheduleWeek(7),
+    todayWeek: () => setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)),
+    simulateSchedule: openScheduleSimulator,
     sendWhatsapp: () => sendWhatsapp(id, event.target.dataset.messageType),
     copyNotice: copyVisibleNotice,
     sendStorageNotice: () => sendStorageNotice(id),
@@ -259,6 +279,10 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  if (event.target.matches("[data-schedule-week]")) {
+    setScheduleWeek(event.target.value);
+    return;
+  }
   if (!event.target.matches("[data-service-select]")) return;
   const selected = event.target.selectedOptions[0];
   const priceInput = event.target.closest("form")?.querySelector("[name='total']");
@@ -317,7 +341,7 @@ function ordersTable(orders, title) {
             <td>${escapeHtml(order.location || "Sin asignar")}</td>
             <td>${escapeHtml(order.paymentStatus || "Pendiente")}<br><small>${escapeHtml(order.paymentMethod || "-")}</small></td>
             <td>${money(order.total)}</td>
-            <td class="actions"><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button><button class="secondary" data-action="copyWhatsapp" data-id="${order.id}">Copiar</button></td>
+            <td class="actions"><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button></td>
           </tr>`).join("") || `<tr><td colspan="9">No hay pedidos cargados.</td></tr>`}</tbody>
       </table></div>
     </div>`;
@@ -346,15 +370,17 @@ function renderSchedule() {
     .flatMap((order) => (order.cycles || []).map((cycle) => ({ ...cycle, order })))
     .filter((cycle) => cycle.type !== "Preparación")
     .sort((a, b) => new Date(a.start) - new Date(b.start));
-  const weekDays = currentWeekDays();
+  const weekDays = currentWeekDays(new Date(`${scheduleWeekStart}T00:00:00`));
   const openHour = Number(state.settings.openHour.split(":")[0]);
   const closeHour = Number(state.settings.closeHour.split(":")[0]);
-  const hours = Array.from({ length: closeHour - openHour }, (_, index) => openHour + index);
+  const hours = Array.from({ length: Math.max(1, closeHour - openHour) }, (_, index) => openHour + index);
   const washDryMinutes = Number(state.settings.washingMinutes) + Number(state.settings.dryingMinutes);
+  const preview = schedulePreview ? `<div class="notice preview-box"><strong>Estimación manual:</strong> ${escapeHtml(schedulePreview.client)} · ${escapeHtml(schedulePreview.service)} tarda aprox. <strong>${schedulePreview.minutes} minutos</strong>. Si entra ${formatDateTime(schedulePreview.start)}, estaría listo ${formatDateTime(schedulePreview.end)}.</div>` : "";
 
   document.getElementById("schedule").innerHTML = `
-    <div class="card hero-card"><div><p class="eyebrow-dark">Turnero</p><h2>Agenda grande por hora</h2><p>De ${escapeHtml(state.settings.openHour)} a ${escapeHtml(state.settings.closeHour)}. Un valet lavado + secado ocupa aprox. <strong>${washDryMinutes} minutos</strong> según configuración.</p></div><div class="status-pill light">${state.settings.smallWashers} lavarropas · ${state.settings.dryers} secadoras</div></div>
-    <div class="card schedule-card"><h3>Semana actual</h3><div class="timeline-grid" style="--days:${weekDays.length}">
+    <div class="card hero-card"><div><p class="eyebrow-dark">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>${weekDays[0].toLocaleDateString("es-AR")}</strong>. Un valet lavado + secado ocupa aprox. <strong>${washDryMinutes} minutos</strong>, pero la estimación real depende de máquinas libres.</p></div><div class="status-pill light">${state.settings.smallWashers} lavarropas · ${state.settings.dryers} secadoras</div></div>
+    <div class="card"><div class="toolbar"><h3>Controles de agenda</h3><div class="actions"><button class="secondary" data-action="prevWeek">← Semana anterior</button><input class="week-input" type="date" data-schedule-week value="${scheduleWeekStart}" /><button class="secondary" data-action="todayWeek">Semana actual</button><button class="secondary" data-action="nextWeek">Semana siguiente →</button><button class="primary" data-action="simulateSchedule">Simular demora</button></div></div>${preview}</div>
+    <div class="card schedule-card"><h3>Semana seleccionada</h3><div class="timeline-grid" style="--days:${weekDays.length}">
       <div class="timeline-head">Hora</div>${weekDays.map((day) => `<div class="timeline-head">${day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" })}</div>`).join("")}
       ${hours.map((hour) => `<div class="timeline-hour">${hourLabel(hour)}</div>${weekDays.map((day) => {
         const cycles = activeCycles.filter((cycle) => cycleOverlapsHour(cycle, day, hour));
@@ -367,18 +393,80 @@ function renderSchedule() {
     }).join("")}</div></div>`;
 }
 
+function setScheduleWeek(value) {
+  scheduleWeekStart = currentWeekStart(new Date(`${value}T00:00:00`)).toISOString().slice(0, 10);
+  renderSchedule();
+}
+
+function moveScheduleWeek(days) {
+  const next = new Date(`${scheduleWeekStart}T00:00:00`);
+  next.setDate(next.getDate() + days);
+  setScheduleWeek(next.toISOString().slice(0, 10));
+}
+
+function openScheduleSimulator() {
+  const now = new Date();
+  const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  openModal("Simular demora", `<form class="form-grid">
+    <label>Cliente de referencia<input name="client" value="Cliente mostrador" /></label>
+    <label>Servicio<select name="serviceId">${state.services.map((service) => `<option value="${service.id}">${escapeHtml(service.name)}</option>`).join("")}</select></label>
+    <label>Fecha y hora de ingreso<input name="start" type="datetime-local" value="${localNow}" /></label>
+    <label class="full">Usa pedidos ya cargados y máquinas configuradas para estimar cuánto tardaría.</label>
+    <button class="primary full">Calcular demora</button>
+  </form>`, (form) => {
+    const data = Object.fromEntries(form.entries());
+    const service = getService(data.serviceId);
+    const schedule = LaundryScheduler.scheduleOrder(state.orders, service, state.settings, new Date(data.start).toISOString());
+    schedulePreview = { client: data.client || "Cliente mostrador", service: service.name, start: new Date(data.start).toISOString(), end: schedule.estimate, minutes: Math.max(0, Math.round((new Date(schedule.estimate) - new Date(data.start)) / 60000)) };
+    setScheduleWeek(data.start.slice(0, 10));
+    closeModal();
+  });
+}
+
 
 function renderStorage() {
   const occupied = new Map(state.orders.filter((order) => order.location && !["Retirado", "Abonado"].includes(order.status)).map((order) => [order.location, order]));
   document.getElementById("storage").innerHTML = `
-    <div class="card hero-card"><div><p class="eyebrow-dark">Depósito</p><h2>Ubicaciones y aviso legal</h2><p>Ubicación física para encontrar paquetes rápido. También podés preparar el cartel/aviso de retiro pendiente.</p></div><button class="secondary" data-action="storageNotice">Ver cartel general</button></div>
-    <div class="notice legal-note"><strong>Nota:</strong> No encontré una ley nacional específica que autorice automáticamente donar prendas no retiradas. El texto se apoya en informar claramente las condiciones al cliente según Ley 24.240; validarlo con asesoría local antes de imprimirlo.</div>
+    <div class="card hero-card"><div><p class="eyebrow-dark">Depósito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hacé clic en una ubicación ocupada para abrir el pedido correspondiente.</p></div><button class="secondary" data-action="storageNotice">Ver aviso general</button></div>
+    <div class="notice legal-note"><strong>Aviso informativo:</strong> El texto de guarda es configurable y debe comunicarse de forma clara al recibir el pedido. Validar plazo y redacción final con asesoría local.</div>
     <div class="storage-grid">${state.locations.map((location) => {
       const order = occupied.get(location.code);
-      return `<article class="location ${order ? "busy" : "free"}"><h3>${escapeHtml(location.code)}</h3>${order ? `<strong>#${escapeHtml(order.number)}</strong><br>${escapeHtml(orderClient(order))}<br><span class="badge ${normalizeClass(order.status)}">${escapeHtml(order.status)}</span><div class="actions mini"><button class="secondary" data-action="storageNotice" data-id="${order.id}">Cartel</button></div>` : "Libre"}</article>`;
+      return order
+        ? `<button class="location busy location-button" data-action="openStorageOrder" data-id="${order.id}"><h3>${escapeHtml(location.code)}</h3><strong>#${escapeHtml(order.number)}</strong><span>${escapeHtml(orderClient(order))}</span><small>${escapeHtml(order.status)}</small></button>`
+        : `<article class="location free"><h3>${escapeHtml(location.code)}</h3>Libre</article>`;
     }).join("")}</div>`;
 }
 
+function openStorageOrder(id) {
+  setView("orders");
+  const input = document.getElementById("orderSearch");
+  const order = getOrder(id);
+  if (input && order) {
+    input.value = order.number;
+    filterOrders(order.number);
+  }
+  openOrderStatusModal(id);
+}
+
+
+function cashReportHtml() {
+  const rows = monthlyCashSummary();
+  const latest = rows.at(-1) || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
+  return `
+    <div class="card report-panel"><div class="toolbar"><div><p class="eyebrow-dark">Reportes de caja</p><h2>Comparación mes a mes</h2></div><span class="status-pill light">Separado de la caja diaria</span></div>
+      <div class="grid four report-metrics">
+        <article class="mini-metric"><span>Ingresos mes</span><strong>${money(latest.income)}</strong></article>
+        <article class="mini-metric"><span>Egresos mes</span><strong>${money(latest.expense)}</strong></article>
+        <article class="mini-metric"><span>Saldo mes</span><strong>${money(latest.balance)}</strong></article>
+        <article class="mini-metric"><span>Vs anterior</span><strong>${latest.diff === null ? "-" : `${latest.diff}%`}</strong></article>
+      </div>
+      <div class="bar-list">${rows.map((row) => {
+        const max = Math.max(row.income, row.expense, 1);
+        return `<div class="bar-row"><div><strong>${row.month}</strong><small>Saldo ${money(row.balance)} · Efectivo ${money(row.cash)} · Transf. ${money(row.transfer)}</small></div><div class="bars"><span class="bar income" style="width:${Math.max(4, (row.income / max) * 100)}%"></span><span class="bar expense" style="width:${Math.max(4, (row.expense / max) * 100)}%"></span></div></div>`;
+      }).join("") || `<p class="notice">Cargá movimientos para ver la comparación mensual.</p>`}</div>
+      <div class="table-wrap"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs mes anterior</th><th>Efectivo</th><th>Transferencia</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.month}</td><td>${money(row.income)}</td><td>${money(row.expense)}</td><td>${money(row.balance)}</td><td>${row.diff === null ? "-" : `${row.diff}%`}</td><td>${money(row.cash)}</td><td>${money(row.transfer)}</td></tr>`).join("") || `<tr><td colspan="7">Sin movimientos de caja.</td></tr>`}</tbody></table></div>
+    </div>`;
+}
 
 function renderCash() {
   if (!cashUnlocked) {
@@ -391,32 +479,14 @@ function renderCash() {
   const transfer = state.cash.filter((entry) => entry.method === "Transferencia").reduce((sum, entry) => sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)), 0);
   document.getElementById("cash").innerHTML = `
     <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>${money(income)}</strong></article><article class="card metric"><span>Egresos</span><strong>${money(expense)}</strong></article><article class="card metric"><span>Efectivo</span><strong>${money(cash)}</strong></article><article class="card metric"><span>Transferencia</span><strong>${money(transfer)}</strong></article></div>
-    <div class="card"><div class="toolbar"><h2>Caja</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>`;
+    <div class="card"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>
+    ${cashReportHtml()}`;
 }
 
 function cashTable() {
   return `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>${[...state.cash].reverse().map((entry) => `<tr><td>${formatDateTime(entry.date)}</td><td>${escapeHtml(entry.type)}</td><td>${escapeHtml(entry.category)}</td><td>${escapeHtml(entry.description)}</td><td>${escapeHtml(entry.method)}</td><td>${money(entry.amount)}</td></tr>`).join("") || `<tr><td colspan="6">Sin movimientos.</td></tr>`}</tbody></table></div>`;
 }
 
-
-function renderReports() {
-  const months = {};
-  state.orders.forEach((order) => {
-    const key = order.createdAt.slice(0, 7);
-    months[key] ||= { orders: 0, income: 0 };
-    months[key].orders += 1;
-    months[key].income += Number(order.total || 0);
-  });
-  const rows = Object.entries(months).sort().map(([month, data], index, arr) => {
-    const prev = arr[index - 1]?.[1].income || 0;
-    const diff = prev ? `${Math.round(((data.income - prev) / prev) * 100)}%` : "-";
-    return `<tr><td>${month}</td><td>${data.orders}</td><td>${money(data.income)}</td><td>${diff}</td></tr>`;
-  }).join("");
-  const cashRows = monthlyCashSummary().map((row) => `<tr><td>${row.month}</td><td>${money(row.income)}</td><td>${money(row.expense)}</td><td>${money(row.balance)}</td><td>${row.diff === null ? "-" : `${row.diff}%`}</td><td>${money(row.cash)}</td><td>${money(row.transfer)}</td></tr>`).join("");
-  document.getElementById("reports").innerHTML = `
-    <div class="card"><h2>Reportes simples</h2><div class="table-wrap"><table><thead><tr><th>Mes</th><th>Pedidos</th><th>Ingresos potenciales</th><th>Comparación</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Cargá pedidos para ver reportes.</td></tr>`}</tbody></table></div></div>
-    <div class="card"><h2>Comparación mes a mes de caja</h2><div class="table-wrap"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs mes anterior</th><th>Efectivo</th><th>Transferencia</th></tr></thead><tbody>${cashRows || `<tr><td colspan="7">Cargá movimientos de caja para comparar meses.</td></tr>`}</tbody></table></div></div>`;
-}
 
 function renderSettings() {
   document.getElementById("settings").innerHTML = `
@@ -428,6 +498,8 @@ function renderSettings() {
       <label>Minutos lavado<input id="washingMinutes" type="number" min="1" value="${Number(state.settings.washingMinutes)}" /></label>
       <label>Minutos secado<input id="dryingMinutes" type="number" min="1" value="${Number(state.settings.dryingMinutes)}" /></label>
       <label>Clave de caja<input id="cashPin" type="password" value="${escapeHtml(state.settings.cashPin)}" /></label>
+      <label class="full">WhatsApp pedido recibido<textarea id="whatsappReceivedMessage">${escapeHtml(state.settings.whatsappReceivedMessage)}</textarea></label>
+      <label class="full">WhatsApp pedido en proceso<textarea id="whatsappWorkingMessage">${escapeHtml(state.settings.whatsappWorkingMessage)}</textarea></label>
       <label class="full">WhatsApp pedido listo<textarea id="whatsappMessage">${escapeHtml(state.settings.whatsappMessage)}</textarea></label>
       <label class="full">WhatsApp retirado<textarea id="whatsappRetiredMessage">${escapeHtml(state.settings.whatsappRetiredMessage)}</textarea></label>
       <label class="full">WhatsApp retirado y abonado<textarea id="whatsappRetiredPaidMessage">${escapeHtml(state.settings.whatsappRetiredPaidMessage)}</textarea></label>
@@ -544,15 +616,18 @@ function openWhatsappMenu(id) {
   if (!order) return;
   openModal(`Mensajes WhatsApp #${escapeHtml(order.number)}`, `
     <div class="message-list">
+      <button class="secondary" data-action="sendWhatsapp" data-message-type="received" data-id="${order.id}">Avisar recibido</button>
+      <button class="secondary" data-action="sendWhatsapp" data-message-type="working" data-id="${order.id}">Avisar en proceso</button>
       <button class="success" data-action="sendWhatsapp" data-message-type="ready" data-id="${order.id}">Avisar que está listo</button>
       <button class="secondary" data-action="sendWhatsapp" data-message-type="retired" data-id="${order.id}">Constancia de retirado</button>
       <button class="secondary" data-action="sendWhatsapp" data-message-type="retiredPaid" data-id="${order.id}">Constancia retirado y abonado</button>
+      <div class="copy-row"><button class="secondary" data-action="copyWhatsapp" data-message-type="received" data-id="${order.id}">Copiar recibido</button><button class="secondary" data-action="copyWhatsapp" data-message-type="working" data-id="${order.id}">Copiar en proceso</button><button class="secondary" data-action="copyWhatsapp" data-message-type="ready" data-id="${order.id}">Copiar listo</button></div>
       <textarea readonly>${escapeHtml(messageForOrder(order, "ready"))}</textarea>
     </div>`);
 }
 
-function copyWhatsapp(id) {
-  const text = messageForOrder(getOrder(id), "ready");
+function copyWhatsapp(id, type = "ready") {
+  const text = messageForOrder(getOrder(id), type);
   if (navigator.clipboard) navigator.clipboard.writeText(text);
   else prompt("Copiá el mensaje para WhatsApp", text);
   alert("Mensaje preparado para enviar manualmente por WhatsApp.");
@@ -596,7 +671,7 @@ function openCashModal(type) {
 
 
 function saveSettings() {
-  ["openHour", "closeHour", "whatsappMessage", "whatsappRetiredMessage", "whatsappRetiredPaidMessage", "storageNoticeText", "cashPin"].forEach((key) => state.settings[key] = document.getElementById(key).value);
+  ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappWorkingMessage", "whatsappMessage", "whatsappRetiredMessage", "whatsappRetiredPaidMessage", "storageNoticeText", "cashPin"].forEach((key) => state.settings[key] = document.getElementById(key).value);
   ["smallWashers", "dryers", "washingMinutes", "dryingMinutes", "storageNoticeDays"].forEach((key) => state.settings[key] = Number(document.getElementById(key).value));
   saveState(); render();
 }
