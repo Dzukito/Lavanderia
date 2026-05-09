@@ -32,9 +32,37 @@ let currentView = "dashboard";
 let cashUnlocked = false;
 
 function loadState() {
+  const defaults = structuredClone(defaultData);
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return structuredClone(defaultData);
-  return { ...structuredClone(defaultData), ...JSON.parse(saved) };
+  if (!saved) return defaults;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(saved);
+  } catch (error) {
+    console.warn("No se pudieron leer los datos guardados. Se cargan datos iniciales.", error);
+    return defaults;
+  }
+
+  const merged = {
+    ...defaults,
+    ...parsed,
+    settings: { ...defaults.settings, ...(parsed.settings || {}) },
+    services: parsed.services?.length ? parsed.services : defaults.services,
+    clients: parsed.clients?.length ? parsed.clients : defaults.clients,
+    orders: parsed.orders || defaults.orders,
+    cash: parsed.cash || defaults.cash,
+    locations: parsed.locations?.length ? parsed.locations : defaults.locations,
+  };
+
+  merged.orders = merged.orders.map((order) => ({
+    ...order,
+    paymentStatus: order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente"),
+    paymentMethod: order.paymentMethod || "Efectivo",
+    cycles: order.cycles || [],
+  }));
+
+  return merged;
 }
 
 function saveState() {
@@ -52,10 +80,6 @@ function formatDateTime(value) {
 
 function normalizeClass(text) {
   return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll(" ", "-");
-}
-
-function todayInput() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function nextId(list) {
@@ -138,7 +162,7 @@ document.addEventListener("click", (event) => {
     newOrder: openOrderModal,
     newClient: openClientModal,
     editClient: () => openClientModal(id),
-    changeState: () => changeState(id),
+    editOrderStatus: () => openOrderStatusModal(id),
     whatsapp: () => openWhatsapp(id),
     copyWhatsapp: () => copyWhatsapp(id),
     cashIncome: () => openCashModal("Ingreso"),
@@ -152,6 +176,17 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("click", (event) => {
   if (event.target.matches("[data-close-modal]")) closeModal();
+});
+
+document.addEventListener("input", (event) => {
+  if (event.target.matches("[data-search-orders]")) filterOrders(event.target.value);
+});
+
+document.addEventListener("change", (event) => {
+  if (!event.target.matches("[data-service-select]")) return;
+  const selected = event.target.selectedOptions[0];
+  const priceInput = event.target.closest("form")?.querySelector("[name='total']");
+  if (priceInput && selected?.dataset.price) priceInput.value = selected.dataset.price;
 });
 
 function renderDashboard() {
@@ -178,7 +213,7 @@ function renderOrders() {
   document.getElementById("orders").innerHTML = `
     <div class="card">
       <div class="toolbar"><h2>Pedidos</h2><div class="actions"><button class="primary" data-action="newOrder">+ Nuevo pedido</button></div></div>
-      <input id="orderSearch" placeholder="Buscar por número, cliente, teléfono, estado o depósito" oninput="filterOrders(this.value)" />
+      <input id="orderSearch" data-search-orders placeholder="Buscar por número, cliente, teléfono, estado o depósito" />
     </div>
     <div id="ordersTable">${ordersTable([...state.orders].reverse(), "Listado de pedidos")}</div>
   `;
@@ -195,7 +230,7 @@ function ordersTable(orders, title) {
     <div class="card">
       <h2>${escapeHtml(title)}</h2>
       <div class="table-wrap"><table>
-        <thead><tr><th>N°</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Estimado</th><th>Depósito</th><th>Total</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>N°</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Estimado</th><th>Depósito</th><th>Pago</th><th>Total</th><th>Acciones</th></tr></thead>
         <tbody>${orders.map((order) => `
           <tr>
             <td><strong>#${escapeHtml(order.number)}</strong></td>
@@ -204,9 +239,10 @@ function ordersTable(orders, title) {
             <td><span class="badge ${normalizeClass(order.status)}">${escapeHtml(order.status)}</span></td>
             <td>${formatDateTime(order.estimate)}</td>
             <td>${escapeHtml(order.location || "Sin asignar")}</td>
+            <td>${escapeHtml(order.paymentStatus || "Pendiente")}<br><small>${escapeHtml(order.paymentMethod || "-")}</small></td>
             <td>${money(order.total)}</td>
-            <td class="actions"><button class="secondary" data-action="changeState" data-id="${order.id}">Estado</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button><button class="secondary" data-action="copyWhatsapp" data-id="${order.id}">Copiar</button></td>
-          </tr>`).join("") || `<tr><td colspan="8">No hay pedidos cargados.</td></tr>`}</tbody>
+            <td class="actions"><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button><button class="secondary" data-action="copyWhatsapp" data-id="${order.id}">Copiar</button></td>
+          </tr>`).join("") || `<tr><td colspan="9">No hay pedidos cargados.</td></tr>`}</tbody>
       </table></div>
     </div>`;
 }
@@ -310,8 +346,10 @@ function openModal(title, html, onSubmit) {
   template.querySelector("h2").textContent = title;
   template.querySelector(".modal-body").innerHTML = html;
   document.body.appendChild(template);
-  const form = document.querySelector(".modal-backdrop form");
+  const modal = document.querySelector(".modal-backdrop");
+  const form = modal.querySelector("form");
   if (form) form.addEventListener("submit", (event) => { event.preventDefault(); onSubmit?.(new FormData(form)); });
+  return modal;
 }
 
 function closeModal() {
@@ -329,13 +367,15 @@ function openClientModal(id) {
 
 
 function openOrderModal() {
-  openModal("Nuevo pedido", `<form class="form-grid">
+  const modal = openModal("Nuevo pedido", `<form class="form-grid">
     <label>Cliente<select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)} · ${escapeHtml(client.phone)}</option>`).join("")}</select></label>
-    <label>Servicio<select name="serviceId" required>${state.services.map((service) => `<option value="${service.id}" data-price="${service.price}">${escapeHtml(service.name)} · ${money(service.price)}</option>`).join("")}</select></label>
+    <label>Servicio<select name="serviceId" data-service-select required>${state.services.map((service) => `<option value="${service.id}" data-price="${service.price}">${escapeHtml(service.name)} · ${money(service.price)}</option>`).join("")}</select></label>
     <label>Cantidad de valets<input name="valets" type="number" min="0" value="1" /></label>
     <label>Paquetes / bolsas<input name="packages" type="number" min="1" value="1" /></label>
-    <label>Precio total<input name="total" type="number" min="0" value="3000" /></label>
+    <label>Precio total<input name="total" type="number" min="0" value="${state.services[0]?.price || 0}" /></label>
     <label>Ubicación depósito<select name="location"><option value="">Asignar luego</option>${availableLocations().map((location) => `<option>${escapeHtml(location.code)}</option>`).join("")}</select></label>
+    <label>Pago<select name="paymentStatus"><option>Pendiente</option><option>Abonado</option></select></label>
+    <label>Medio de pago<select name="paymentMethod"><option>Efectivo</option><option>Transferencia</option></select></label>
     <label class="full">Observaciones<textarea name="notes" placeholder="Prendas delicadas, manchas, indicaciones..."></textarea></label>
     <button class="primary full">Crear pedido</button>
   </form>`, (form) => {
@@ -343,21 +383,52 @@ function openOrderModal() {
     const createdAt = new Date().toISOString();
     const service = getService(data.serviceId);
     const schedule = createOrderSchedule(service, createdAt);
-    state.orders.push({ id: nextId(state.orders), number: nextOrderNumber(), clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Recibido", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location: data.location, notes: data.notes });
+    const order = { id: nextId(state.orders), number: nextOrderNumber(), clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Recibido", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location: data.location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+    state.orders.push(order);
+    if (order.paymentStatus === "Abonado") syncOrderPayment(order);
     saveState(); closeModal(); setView("orders");
   });
+  modal.querySelector("[data-service-select]")?.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-
-function changeState(id) {
-  const order = getOrder(id);
-  const index = STATES.indexOf(order.status);
-  order.status = STATES[Math.min(index + 1, STATES.length - 1)];
-  if (order.status === "Abonado" && !state.cash.some((entry) => entry.orderId === order.id)) {
-    state.cash.push({ id: nextId(state.cash), type: "Ingreso", category: "Pedido", description: `Cobro pedido #${order.number}`, method: "Efectivo", amount: order.total, orderId: order.id, date: new Date().toISOString() });
+function syncOrderPayment(order) {
+  const existing = state.cash.find((entry) => entry.orderId === order.id && entry.category === "Pedido");
+  if (order.paymentStatus !== "Abonado") {
+    state.cash = state.cash.filter((entry) => !(entry.orderId === order.id && entry.category === "Pedido"));
+    return;
   }
-  if (["Retirado", "Abonado"].includes(order.status)) order.location = "";
-  saveState(); render();
+
+  const payment = { type: "Ingreso", category: "Pedido", description: `Cobro pedido #${order.number}`, method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
+  if (existing) Object.assign(existing, payment);
+  else state.cash.push({ id: nextId(state.cash), date: new Date().toISOString(), ...payment });
+}
+
+function openOrderStatusModal(id) {
+  const order = getOrder(id);
+  if (!order) return;
+  const locations = availableLocations(order.id);
+  if (order.location && !locations.some((location) => location.code === order.location)) locations.unshift({ id: 0, code: order.location });
+
+  openModal(`Editar pedido #${escapeHtml(order.number)}`, `<form class="form-grid">
+    <label>Estado<select name="status">${STATES.map((status) => `<option ${status === order.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
+    <label>Ubicación depósito<select name="location"><option value="">Sin asignar</option>${locations.map((location) => `<option ${location.code === order.location ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
+    <label>Pago<select name="paymentStatus"><option ${order.paymentStatus !== "Abonado" ? "selected" : ""}>Pendiente</option><option ${order.paymentStatus === "Abonado" ? "selected" : ""}>Abonado</option></select></label>
+    <label>Medio de pago<select name="paymentMethod"><option ${order.paymentMethod !== "Transferencia" ? "selected" : ""}>Efectivo</option><option ${order.paymentMethod === "Transferencia" ? "selected" : ""}>Transferencia</option></select></label>
+    <label>Precio total<input name="total" type="number" min="0" value="${Number(order.total || 0)}" /></label>
+    <label class="full">Observaciones<textarea name="notes">${escapeHtml(order.notes || "")}</textarea></label>
+    <button class="primary full">Guardar cambios</button>
+  </form>`, (form) => {
+    const data = Object.fromEntries(form.entries());
+    order.status = data.status;
+    order.location = ["Retirado", "Abonado"].includes(order.status) ? "" : data.location;
+    order.paymentStatus = data.paymentStatus;
+    order.paymentMethod = data.paymentMethod;
+    order.total = Number(data.total);
+    order.notes = data.notes;
+    if (order.paymentStatus === "Abonado" || order.status === "Abonado") order.paymentStatus = "Abonado";
+    syncOrderPayment(order);
+    saveState(); closeModal(); render();
+  });
 }
 
 function whatsappText(order) {
@@ -366,13 +437,15 @@ function whatsappText(order) {
 
 function openWhatsapp(id) {
   const order = getOrder(id);
-  const phone = getClient(order.clientId)?.phone || "";
+  const phone = (getClient(order.clientId)?.phone || "").replace(/\D/g, "");
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(whatsappText(order))}`, "_blank");
 }
 
 function copyWhatsapp(id) {
-  navigator.clipboard.writeText(whatsappText(getOrder(id)));
-  alert("Mensaje copiado para enviar manualmente por WhatsApp.");
+  const text = whatsappText(getOrder(id));
+  if (navigator.clipboard) navigator.clipboard.writeText(text);
+  else prompt("Copiá el mensaje para WhatsApp", text);
+  alert("Mensaje preparado para enviar manualmente por WhatsApp.");
 }
 
 function unlockCash() {
