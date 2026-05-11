@@ -234,7 +234,7 @@ tr:hover td { background: #f8fbff; }
 .client-avatar { background: #eaf1ff; color: var(--primary-dark); font-size: 34px; }
 .client-avatar::before { content: none; }
 .items-builder { background: #f8fbff; border: 2px solid var(--line); border-radius: 18px; padding: 14px; }
-.item-row { display: grid; gap: 10px; grid-template-columns: 1.4fr 1fr 150px 54px; margin-bottom: 10px; }
+.item-row { display: grid; gap: 10px; grid-template-columns: 90px 1.4fr 1fr 150px 54px; margin-bottom: 10px; }
 .payment-badge { border-radius: 999px; display: inline-flex; font-weight: 900; padding: 5px 10px; }
 .payment-badge.paid { background: #d3f9d8; color: #2b8a3e; }
 .payment-badge.due { background: #fff4e6; color: #d9480f; }
@@ -251,3 +251,11 @@ tr:hover td { background: #f8fbff; }
   padding: 12px;
   border-radius: 12px;
 }
+
+.history-list { display: grid; gap: 12px; }
+.history-item { align-items: center; background: #f8fbff; border: 2px solid var(--line); border-radius: 16px; display: grid; gap: 10px; grid-template-columns: 1fr 2fr 1fr auto; padding: 12px; }
+.history-item small { color: var(--muted); display: block; }
+.order-detail ul { margin-top: 8px; padding-left: 22px; }
+.machine-assign-form { border-top: 2px solid var(--line); margin-top: 16px; padding-top: 16px; }
+input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 900; }
+@media (max-width: 920px) { .history-item { grid-template-columns: 1fr; } }

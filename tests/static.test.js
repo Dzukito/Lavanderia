@@ -36,6 +36,13 @@ for (const feature of [
   'currentWeekDays',
   'setScheduleWeek',
     'openStorageOrder',
+  'openClientHistoryModal',
+  'openOrderViewModal',
+  'saveMachineSlot',
+  'exportData',
+  'importData',
+  'itemLineTotal',
+  'orderItemsTotal',
   'authorizedPickups',
 ]) {
   assert.match(app, new RegExp(feature), `missing app feature ${feature}`);
@@ -59,6 +66,12 @@ assert.match(polyfills, /window\.Map/, 'polyfills should cover Map used by compi
 assert.match(polyfills, /elementPrototype\.closest/, 'polyfills should cover delegated click helpers');
 assert.doesNotMatch(app, /Cantidad de valets/, 'new order should use manual items instead of valet quantity');
 assert.match(app, /data-items-list/, 'new order should include manual item rows');
+assert.match(app, /itemQuantity/, 'new order should allow item quantities');
+assert.match(app, /data-items-total[^\n]+readonly/, 'new order total should be calculated read-only');
+assert.match(app, /clientHistory/, 'clients should expose history action');
+assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks should open read-only order view');
+assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignment');
+assert.doesNotMatch(app, /💵|🏦/, 'payment method labels should not include emoji icons');
 assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
 assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
@@ -66,7 +79,7 @@ assert.match(app, /if \(view === "cash"\)[\s\S]{0,40}cashUnlocked = false/, 'cas
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 

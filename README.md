@@ -17,27 +17,31 @@ python3 -m http.server 8080
 
 Luego abrir `http://localhost:8080`.
 
+## Importante sobre navegadores y datos
+
+Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Firefox y Edge no comparten ese almacenamiento entre sí, y cada perfil/ruta local puede tener un espacio separado. Si cargás pedidos en Chrome y abrís el mismo `index.html` en Firefox o Edge, vas a ver la demo inicial hasta importar un backup. Para mover datos entre navegadores usá **Config. → Exportar datos** y luego **Config. → Importar datos**.
+
 ## Funciones incluidas
 
-- Clientes con nombre, teléfono, dirección, notas, historial de pedidos y personas autorizadas a retirar.
-- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2 - 1001`, prendas/trabajos manuales, estado simple, horario estimado, precio, pago, medio de pago y observaciones visibles.
+- Clientes con nombre, teléfono, dirección, notas, botón de historial de pedidos y personas autorizadas a retirar.
+- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2 - 1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
 - Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.
-- Asignación de ciclos por disponibilidad real de lavarropas/secadoras, evitando superponer pedidos en una misma máquina.
+- Asignación automática de ciclos por disponibilidad real de lavarropas/secadoras, con opción de abrir una máquina y agregar manualmente otro pedido.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
-- Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido y cartel/aviso configurable para pedidos no retirados.
+- Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido; al hacer clic se abre la vista del pedido sin editarlo, más cartel/aviso configurable para pedidos no retirados.
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
 - Caja protegida con clave inicial `1234`, editable desde configuración, ingresos, egresos, efectivo y transferencia; al marcar un pedido como abonado se genera el ingreso correspondiente.
 - Gastos por categorías como agua, luz, gas, insumos, alquiler y otros servicios.
 - Caja diaria protegida por clave cada vez que se entra y comparación mensual en la pantalla separada **Caja mensual**, con tarjetas de ingresos, egresos, saldo, efectivo y transferencia.
-- Configuración de horarios, máquinas, ciclos y mensaje de WhatsApp.
+- Configuración de horarios, máquinas, ciclos, mensaje de WhatsApp y exportación/importación de datos para moverlos entre navegadores.
 
 ## Flujo diario sugerido
 
 1. Cargar o buscar cliente.
 2. Crear pedido desde **Nuevo pedido**.
-3. Elegir depósito, cargar cada prenda/trabajo con su servicio y precio, y revisar el total.
+3. Elegir depósito, cargar cada prenda/trabajo con cantidad, servicio y precio unitario; el total se calcula solo.
 4. Cambiar el estado con el botón **Estado** y editar datos de pago/observaciones con **Editar**.
 5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.

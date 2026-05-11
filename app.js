@@ -199,7 +199,8 @@ function loadState() {
     merged.orders = merged.orders.map(function (order) {
         var paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
         var status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
-        var items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0) }];
+        var items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0), quantity: 1 }];
+        items = items.map(function (item) { return __assign({ quantity: 1 }, item); });
         return __assign(__assign({}, order), { status: status, paymentStatus: paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items: items });
     });
     return merged;
@@ -378,6 +379,8 @@ document.addEventListener("click", function (event) {
         newOrder: openOrderModal,
         newClient: openClientModal,
         editClient: function () { return openClientModal(id); },
+        clientHistory: function () { return openClientHistoryModal(id); },
+        viewOrder: function () { return openOrderViewModal(id); },
         editOrderStatus: function () { return openOrderEditModal(id); },
         orderState: function () { return openOrderStateModal(id); },
         dashboardTab: function () { return setDashboardTab(target.getAttribute("data-tab")); },
@@ -392,11 +395,14 @@ document.addEventListener("click", function (event) {
         copyNotice: copyVisibleNotice,
         sendStorageNotice: function () { return sendStorageNotice(id); },
         machineEdit: function () { return openMachineModal(target.getAttribute("data-machine")); },
+        saveMachineSlot: function () { return saveMachineSlot(target); },
         cashIncome: function () { return openCashModal("Ingreso"); },
         cashExpense: function () { return openCashModal("Egreso"); },
         unlockCash: unlockCash,
         saveSettings: saveSettings,
         resetDemo: resetDemo,
+        exportData: exportData,
+        importData: importData,
     };
     if (handlers[action])
         handlers[action]();
@@ -425,15 +431,25 @@ document.addEventListener("change", function (event) {
 function orderDisplayCode(order) {
     return order.location ? "".concat(order.location, "-#").concat(String(order.id).padStart(4, "0")) : "Sin dep\u00F3sito-#".concat(String(order.id).padStart(4, "0"));
 }
+function itemLineTotal(item) {
+    return Number(item.price || 0) * Number(item.quantity || 1);
+}
+function orderItemsTotal(items) {
+    return (items || []).reduce(function (sum, item) { return sum + itemLineTotal(item); }, 0);
+}
 function itemSummary(order) {
-    return (order.items || []).map(function (item) { return "".concat(item.name, " (").concat(money(item.price), ")"); }).join(" · ") || serviceSummary(order);
+    return (order.items || []).map(function (item) {
+        var quantity = Number(item.quantity || 1);
+        var prefix = quantity > 1 ? quantity + " x " : "";
+        return "".concat(prefix).concat(item.name, " (").concat(money(itemLineTotal(item)), ")");
+    }).join(" · ") || serviceSummary(order);
 }
 function paymentBadge(order) {
     var status = order.paymentStatus || "Pendiente";
     return "<span class=\"payment-badge ".concat(status === "Abonado" ? "paid" : "due", "\">").concat(status === "Abonado" ? "✅ Abonado" : "🟠 Pendiente", "</span>");
 }
 function paymentMethodLabel(method) {
-    return method === "Transferencia" ? "🏦 Transferencia" : "💵 Efectivo";
+    return method === "Transferencia" ? "Transferencia" : "Efectivo";
 }
 function nextFreeLocation() {
     return (availableLocations()[0] && availableLocations()[0].code) || "";
@@ -495,7 +511,7 @@ function ordersTable(orders, title) {
     return orderCards(orders, title, false);
 }
 function renderClients() {
-    document.getElementById("clients").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Personas</p><h2>Clientes</h2></div><button class=\"primary\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"client-card-grid\">".concat(state.clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">\uD83D\uDC64</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><button class=\"secondary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></article>"); }).join(""), "</div>\n    </div>");
+    document.getElementById("clients").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Personas</p><h2>Clientes</h2></div><button class=\"primary\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"client-card-grid\">".concat(state.clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"secondary\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"secondary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join(""), "</div>\n    </div>");
 }
 function renderSchedule() {
     var machines = __spreadArray(__spreadArray([], LaundryScheduler.machineNames("Lavado", state.settings.smallWashers).map(function (name) { return ({ type: "Lavado", name: name }); }), true), LaundryScheduler.machineNames("Secado", state.settings.dryers).map(function (name) { return ({ type: "Secado", name: name }); }), true);
@@ -536,10 +552,46 @@ function openMachineModal(machineName) {
     selectedMachine = machineName;
     var assigned = state.orders
         .filter(function (order) { return order.status !== "Retirado"; })
-        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle) { return (__assign(__assign({}, cycle), { order: order })); })); }, [])
+        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle, index) { return (__assign(__assign({}, cycle), { order: order, cycleIndex: index })); })); }, [])
         .filter(function (cycle) { return cycle.machine === machineName; })
         .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
-    openModal("M\u00E1quina ".concat(escapeHtml(machineName)), "\n    <div class=\"machine-modal-list\">".concat(assigned.map(function (cycle) { return "<button class=\"slot machine-slot\" data-action=\"openStorageOrder\" data-id=\"".concat(cycle.order.id, "\"><strong>").concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong>").concat(escapeHtml(orderClient(cycle.order)), "<small>").concat(formatDateTime(cycle.start), " \u2192 ").concat(formatDateTime(cycle.end), "</small></button>"); }).join("") || "<p>M\u00E1quina libre. No hay pedidos asignados.</p>", "</div>"));
+    var orderOptions = state.orders.filter(function (order) { return order.status !== "Retirado"; }).map(function (order) { return "<option value=\"".concat(order.id, "\">").concat(escapeHtml(orderDisplayCode(order)), " · ").concat(escapeHtml(orderClient(order)), "</option>"); }).join("");
+    var assignedHtml = assigned.map(function (cycle) { return "<button class=\"slot machine-slot\" data-action=\"viewOrder\" data-id=\"".concat(cycle.order.id, "\"><strong>").concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong>").concat(escapeHtml(orderClient(cycle.order)), "<small>").concat(formatDateTime(cycle.start), " → ").concat(formatDateTime(cycle.end), "</small></button>"); }).join("") || "<p>Máquina libre. No hay pedidos asignados.</p>";
+    var html = "<div class=\"machine-modal-list\">" + assignedHtml + "</div>" +
+        "<form class=\"form-grid machine-assign-form\">" +
+        "<label class=\"full\">Pedido<select name=\"orderId\" required>" + (orderOptions || "<option value=\"\">No hay pedidos activos</option>") + "</select></label>" +
+        "<label>Tipo<select name=\"type\"><option>Lavado</option><option>Secado</option><option>Preparación</option></select></label>" +
+        "<label>Inicio<input name=\"start\" type=\"datetime-local\" required /></label>" +
+        "<label>Minutos<input name=\"minutes\" type=\"number\" min=\"1\" value=\"30\" required /></label>" +
+        "<button class=\"primary full\" type=\"button\" data-action=\"saveMachineSlot\" data-machine=\"" + escapeHtml(machineName) + "\">Asignar a esta máquina</button>" +
+        "</form>";
+    openModal("Máquina ".concat(escapeHtml(machineName)), html);
+}
+function saveMachineSlot(button) {
+    var form = button.closest("form");
+    var data = formDataToObject(form);
+    var order = getOrder(data.orderId);
+    if (!order) {
+        alert("Elegí un pedido activo.");
+        return;
+    }
+    var start = new Date(data.start);
+    if (isNaN(start.getTime())) {
+        alert("Indicá fecha y hora de inicio.");
+        return;
+    }
+    var minutes = Number(data.minutes || 0);
+    if (!minutes) {
+        alert("Indicá duración en minutos.");
+        return;
+    }
+    var end = new Date(start.getTime() + minutes * 60000);
+    order.cycles = order.cycles || [];
+    order.cycles.push({ type: data.type || "Preparación", machine: button.getAttribute("data-machine"), start: start.toISOString(), end: end.toISOString(), minutes: minutes, manual: true });
+    order.estimate = order.cycles.reduce(function (latest, cycle) { return new Date(cycle.end) > new Date(latest) ? cycle.end : latest; }, order.estimate || end.toISOString());
+    saveState();
+    closeModal();
+    render();
 }
 function renderStorage() {
     var occupied = {};
@@ -561,7 +613,7 @@ function openStorageOrder(id) {
         input.value = order.number;
         filterOrders(order.number);
     }
-    openOrderEditModal(id);
+    openOrderViewModal(id);
 }
 function cashReportHtml() {
     var rows = monthlyCashSummary();
@@ -589,7 +641,7 @@ function renderCashReports() {
     document.getElementById("cashReports").innerHTML = cashReportHtml();
 }
 function renderSettings() {
-    document.getElementById("settings").innerHTML = "\n    <div class=\"card\"><h2>Configuraci\u00F3n</h2><div class=\"form-grid\">\n      <label>Apertura<input id=\"openHour\" type=\"time\" value=\"".concat(escapeHtml(state.settings.openHour), "\" /></label>\n      <label>Cierre<input id=\"closeHour\" type=\"time\" value=\"").concat(escapeHtml(state.settings.closeHour), "\" /></label>\n      <label>Lavarropas chicos<input id=\"smallWashers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.smallWashers), "\" /></label>\n      <label>Secadoras<input id=\"dryers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryers), "\" /></label>\n      <label>Minutos lavado<input id=\"washingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.washingMinutes), "\" /></label>\n      <label>Minutos secado<input id=\"dryingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryingMinutes), "\" /></label>\n      <label>Clave de caja<input id=\"cashPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.cashPin), "\" /></label>\n      <label class=\"full\">WhatsApp pedido recibido<textarea id=\"whatsappReceivedMessage\">").concat(escapeHtml(state.settings.whatsappReceivedMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp pedido listo<textarea id=\"whatsappMessage\">").concat(escapeHtml(state.settings.whatsappMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp retirado<textarea id=\"whatsappRetiredMessage\">").concat(escapeHtml(state.settings.whatsappRetiredMessage), "</textarea></label>\n      <label>D\u00EDas para aviso dep\u00F3sito<input id=\"storageNoticeDays\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.storageNoticeDays), "\" /></label>\n      <label class=\"full\">Cartel de dep\u00F3sito<textarea id=\"storageNoticeText\">").concat(escapeHtml(state.settings.storageNoticeText), "</textarea></label>\n    </div><br><div class=\"actions\"><button class=\"primary\" data-action=\"saveSettings\">Guardar</button><button class=\"danger\" data-action=\"resetDemo\">Reiniciar demo</button></div></div>");
+    document.getElementById("settings").innerHTML = "\n    <div class=\"card\"><h2>Configuraci\u00F3n</h2><div class=\"form-grid\">\n      <label>Apertura<input id=\"openHour\" type=\"time\" value=\"".concat(escapeHtml(state.settings.openHour), "\" /></label>\n      <label>Cierre<input id=\"closeHour\" type=\"time\" value=\"").concat(escapeHtml(state.settings.closeHour), "\" /></label>\n      <label>Lavarropas chicos<input id=\"smallWashers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.smallWashers), "\" /></label>\n      <label>Secadoras<input id=\"dryers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryers), "\" /></label>\n      <label>Minutos lavado<input id=\"washingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.washingMinutes), "\" /></label>\n      <label>Minutos secado<input id=\"dryingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryingMinutes), "\" /></label>\n      <label>Clave de caja<input id=\"cashPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.cashPin), "\" /></label>\n      <label class=\"full\">WhatsApp pedido recibido<textarea id=\"whatsappReceivedMessage\">").concat(escapeHtml(state.settings.whatsappReceivedMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp pedido listo<textarea id=\"whatsappMessage\">").concat(escapeHtml(state.settings.whatsappMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp retirado<textarea id=\"whatsappRetiredMessage\">").concat(escapeHtml(state.settings.whatsappRetiredMessage), "</textarea></label>\n      <label>D\u00EDas para aviso dep\u00F3sito<input id=\"storageNoticeDays\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.storageNoticeDays), "\" /></label>\n      <label class=\"full\">Cartel de dep\u00F3sito<textarea id=\"storageNoticeText\">").concat(escapeHtml(state.settings.storageNoticeText), "</textarea></label>\n    </div><br><div class=\"actions\"><button class=\"primary\" data-action=\"saveSettings\">Guardar</button><button class=\"secondary\" data-action=\"exportData\">Exportar datos</button><button class=\"secondary\" data-action=\"importData\">Importar datos</button><button class=\"danger\" data-action=\"resetDemo\">Reiniciar demo</button></div></div>");
 }
 function openModal(title, html, onSubmit) {
     var template = document.getElementById("modalTemplate").content.cloneNode(true);
@@ -624,7 +676,7 @@ function openClientModal(id) {
 function openOrderModal() {
     var defaultLocation = nextFreeLocation();
     var firstService = state.services[0];
-    var modal = openModal("Nuevo pedido", "<form class=\"form-grid\">\n    <label>Cliente<select name=\"clientId\" required>".concat(state.clients.map(function (client) { return "<option value=\"".concat(client.id, "\">").concat(escapeHtml(client.name), " \u00B7 ").concat(escapeHtml(client.phone), "</option>"); }).join(""), "</select></label>\n    <label>Dep\u00F3sito<select name=\"location\" required>").concat(availableLocations().map(function (location) { return "<option ".concat(location.code === defaultLocation ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option>Pendiente</option><option>Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\">\uD83D\uDCB5 Efectivo</option><option value=\"Transferencia\">\uD83C\uDFE6 Transferencia</option></select></label>\n    <div class=\"full items-builder\"><h3>Prendas / trabajos</h3><div data-items-list>\n      ").concat(orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, ""), "\n    </div><button class=\"secondary\" type=\"button\" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name=\"total\" data-items-total type=\"number\" min=\"0\" value=\"").concat((firstService && firstService.price) || 0, "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\" placeholder=\"Ej: Frasada polar roja, manchas, preferencias...\"></textarea></label>\n    <button class=\"primary full\">Crear pedido</button>\n  </form>"), function (form) {
+    var modal = openModal("Nuevo pedido", "<form class=\"form-grid\">\n    <label>Cliente<select name=\"clientId\" required>".concat(state.clients.map(function (client) { return "<option value=\"".concat(client.id, "\">").concat(escapeHtml(client.name), " · ").concat(escapeHtml(client.phone), "</option>"); }).join(""), "</select></label>\n    <label>Depósito<select name=\"location\" required>").concat(availableLocations().map(function (location) { return "<option ".concat(location.code === defaultLocation ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option>Pendiente</option><option>Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\">Efectivo</option><option value=\"Transferencia\">Transferencia</option></select></label>\n    <div class=\"full items-builder\"><h3>Prendas / trabajos</h3><div data-items-list>\n      ").concat(orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, "", 1), "\n    </div><button class=\"secondary\" type=\"button\" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name=\"total\" data-items-total type=\"number\" min=\"0\" readonly value=\"").concat((firstService && firstService.price) || 0, "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\" placeholder=\"Ej: Frasada polar roja, manchas, preferencias...\"></textarea></label>\n    <button class=\"primary full\">Crear pedido</button>\n  </form>"), function (form) {
         var data = formDataToObject(form);
         var createdAt = new Date().toISOString();
         var items = collectItems(form);
@@ -632,38 +684,37 @@ function openOrderModal() {
         var schedule = createOrderSchedule(primaryService, createdAt);
         var orderId = nextId(state.orders);
         var location = data.location || nextFreeLocation();
-        var total = Number(data.total || items.reduce(function (sum, item) { return sum + Number(item.price || 0); }, 0));
+        var total = orderItemsTotal(items);
         var order = { id: orderId, number: "".concat(location, "-#").concat(String(orderId).padStart(4, "0")), clientId: Number(data.clientId), serviceId: Number(primaryService.id), createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
         state.orders.push(order);
         if (order.paymentStatus === "Abonado")
             syncOrderPayment(order);
         saveState();
         closeModal();
-        setView("orders");
+        render();
     });
     attachItemBuilder(modal);
 }
-function orderItemRow(serviceId, price, name) {
+function orderItemRow(serviceId, price, name, quantity) {
     if (name === void 0) { name = ""; }
-    return "<div class=\"item-row\"><input name=\"itemName\" placeholder=\"Ej: Frasada polar roja\" value=\"".concat(escapeHtml(name), "\" /><select name=\"itemService\">").concat(state.services.map(function (service) { return "<option value=\"".concat(service.id, "\" data-price=\"").concat(service.price, "\" ").concat(Number(service.id) === Number(serviceId) ? "selected" : "", ">").concat(escapeHtml(service.name), "</option>"); }).join(""), "</select><input name=\"itemPrice\" type=\"number\" min=\"0\" value=\"").concat(Number(price || 0), "\" /><button class=\"danger\" type=\"button\" data-remove-item>\u00D7</button></div>");
+    if (quantity === void 0) { quantity = 1; }
+    return "<div class=\"item-row\"><input name=\"itemQuantity\" type=\"number\" min=\"1\" value=\"".concat(Number(quantity || 1), "\" aria-label=\"Cantidad\" /><input name=\"itemName\" placeholder=\"Ej: Frasada polar roja\" value=\"").concat(escapeHtml(name), "\" /><select name=\"itemService\">").concat(state.services.map(function (service) { return "<option value=\"".concat(service.id, "\" data-price=\"").concat(service.price, "\" ").concat(Number(service.id) === Number(serviceId) ? "selected" : "", ">").concat(escapeHtml(service.name), "</option>"); }).join(""), "</select><input name=\"itemPrice\" type=\"number\" min=\"0\" value=\"").concat(Number(price || 0), "\" /><button class=\"danger\" type=\"button\" data-remove-item>×</button></div>");
 }
 function attachItemBuilder(modal) {
     var list = modal.querySelector("[data-items-list]");
     var recalc = function () {
-        var total = listFrom(modal.querySelectorAll('[name="itemPrice"]')).reduce(function (sum, input) { return sum + Number(input.value || 0); }, 0);
+        var total = collectItems(modal).reduce(function (sum, item) { return sum + itemLineTotal(item); }, 0);
         modal.querySelector("[data-items-total]").value = total;
     };
     modal.addEventListener("click", function (event) {
         if (event.target.matches("[data-add-item]")) {
-            list.insertAdjacentHTML("beforeend", orderItemRow(state.services[0].id, state.services[0].price));
+            list.insertAdjacentHTML("beforeend", orderItemRow(state.services[0].id, state.services[0].price, "", 1));
             recalc();
         }
         if (event.target.matches("[data-remove-item]")) {
-            {
-                var row = event.target.closest(".item-row");
-                if (row)
-                    row.remove();
-            }
+            var row = event.target.closest(".item-row");
+            if (row)
+                row.remove();
             recalc();
         }
     });
@@ -675,7 +726,7 @@ function attachItemBuilder(modal) {
             recalc();
         }
     });
-    modal.addEventListener("input", function (event) { if (event.target.matches('[name="itemPrice"]'))
+    modal.addEventListener("input", function (event) { if (event.target.matches('[name="itemPrice"], [name="itemQuantity"]'))
         recalc(); });
 }
 function collectItems(form) {
@@ -683,7 +734,7 @@ function collectItems(form) {
     return rows.map(function (row) {
         var serviceId = Number(row.querySelector('[name="itemService"]').value);
         var service = getService(serviceId);
-        return { name: row.querySelector('[name="itemName"]').value || service.name, serviceId: serviceId, serviceName: service.name, price: Number(row.querySelector('[name="itemPrice"]').value || 0) };
+        return { name: row.querySelector('[name="itemName"]').value || service.name, quantity: Number(row.querySelector('[name="itemQuantity"]').value || 1), serviceId: serviceId, serviceName: service.name, price: Number(row.querySelector('[name="itemPrice"]').value || 0) };
     }).filter(function (item) { return item.name || item.price; });
 }
 function syncOrderPayment(order) {
@@ -700,6 +751,25 @@ function syncOrderPayment(order) {
         state.cash.push(__assign({ id: nextId(state.cash), date: new Date().toISOString() }, payment));
     order.paymentSynced = true;
 }
+function orderHistoryRows(orders) {
+    return "<div class=\"history-list\">".concat(orders.map(function (order) { return "<article class=\"history-item\"><div><strong>".concat(escapeHtml(orderDisplayCode(order)), "</strong><small>").concat(formatDateTime(order.createdAt), " · ").concat(escapeHtml(order.status), "</small></div><div>").concat(escapeHtml(itemSummary(order)), "</div><div><strong>").concat(money(order.total), "</strong> · ").concat(escapeHtml(order.paymentStatus || "Pendiente"), " · ").concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), "</div><button class=\"secondary\" data-action=\"viewOrder\" data-id=\"").concat(order.id, "\">Ver</button></article>"); }).join("") || "<p>Este cliente todavía no tiene pedidos.</p>", "</div>");
+}
+function openClientHistoryModal(id) {
+    var client = getClient(id);
+    if (!client)
+        return;
+    var orders = state.orders.filter(function (order) { return order.clientId === Number(id); }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    openModal("Historial de ".concat(escapeHtml(client.name)), orderHistoryRows(orders));
+}
+function orderDetailHtml(order) {
+    return "<div class=\"order-detail\"><p><strong>Cliente:</strong> ".concat(escapeHtml(orderClient(order)), "</p><p><strong>Depósito:</strong> ").concat(escapeHtml(order.location || "Sin asignar"), "</p><p><strong>Estado:</strong> ").concat(escapeHtml(order.status), "</p><p><strong>Pago:</strong> ").concat(escapeHtml(order.paymentStatus || "Pendiente"), " · ").concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), "</p><p><strong>Total:</strong> ").concat(money(order.total), "</p><p><strong>Estimado:</strong> ").concat(formatDateTime(order.estimate), "</p><h3>Prendas / trabajos</h3><ul>").concat((order.items || []).map(function (item) { return "<li>".concat(Number(item.quantity || 1), " x ").concat(escapeHtml(item.name), " · ").concat(escapeHtml(item.serviceName || ""), " · ").concat(money(itemLineTotal(item)), "</li>"); }).join(""), "</ul><p><strong>Observaciones:</strong> ").concat(escapeHtml(order.notes || "Sin observaciones"), "</p><div class=\"actions\"><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div></div>");
+}
+function openOrderViewModal(id) {
+    var order = getOrder(id);
+    if (!order)
+        return;
+    openModal("Pedido ".concat(escapeHtml(orderDisplayCode(order))), orderDetailHtml(order));
+}
 function openOrderEditModal(id) {
     var order = getOrder(id);
     if (!order)
@@ -707,7 +777,7 @@ function openOrderEditModal(id) {
     var locations = availableLocations(order.id);
     if (order.location && !locations.some(function (location) { return location.code === order.location; }))
         locations.unshift({ id: 0, code: order.location });
-    openModal("Editar pedido ".concat(escapeHtml(order.number)), "<form class=\"form-grid\">\n    <label>Dep\u00F3sito / n\u00FAmero<select name=\"location\"><option value=\"\">Sin asignar</option>".concat(locations.map(function (location) { return "<option ".concat(location.code === order.location ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option ").concat(order.paymentStatus !== "Abonado" ? "selected" : "", ">Pendiente</option><option ").concat(order.paymentStatus === "Abonado" ? "selected" : "", ">Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\" ").concat(order.paymentMethod !== "Transferencia" ? "selected" : "", ">\uD83D\uDCB5 Efectivo</option><option value=\"Transferencia\" ").concat(order.paymentMethod === "Transferencia" ? "selected" : "", ">\uD83C\uDFE6 Transferencia</option></select></label>\n    <label>Precio total<input name=\"total\" type=\"number\" min=\"0\" value=\"").concat(Number(order.total || 0), "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\">").concat(escapeHtml(order.notes || ""), "</textarea></label>\n    <button class=\"primary full\">Guardar cambios</button>\n  </form>"), function (form) {
+    openModal("Editar pedido ".concat(escapeHtml(order.number)), "<form class=\"form-grid\">\n    <label>Dep\u00F3sito / n\u00FAmero<select name=\"location\"><option value=\"\">Sin asignar</option>".concat(locations.map(function (location) { return "<option ".concat(location.code === order.location ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option ").concat(order.paymentStatus !== "Abonado" ? "selected" : "", ">Pendiente</option><option ").concat(order.paymentStatus === "Abonado" ? "selected" : "", ">Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\" ").concat(order.paymentMethod !== "Transferencia" ? "selected" : "", ">Efectivo</option><option value=\"Transferencia\" ").concat(order.paymentMethod === "Transferencia" ? "selected" : "", ">Transferencia</option></select></label>\n    <label>Precio total<input name=\"total\" type=\"number\" min=\"0\" value=\"").concat(Number(order.total || 0), "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\">").concat(escapeHtml(order.notes || ""), "</textarea></label>\n    <button class=\"primary full\">Guardar cambios</button>\n  </form>"), function (form) {
         var data = formDataToObject(form);
         order.location = data.location;
         order.number = orderDisplayCode(order);
@@ -790,12 +860,34 @@ function unlockCash() {
 }
 function openCashModal(type) {
     var categories = type === "Ingreso" ? ["Pedido", "Seña", "Otro"] : ["Agua", "Luz", "Gas", "Insumos", "Alquiler", "Otros servicios"];
-    openModal("".concat(type, " de caja"), "<form class=\"form-grid\"><label>Categor\u00EDa<select name=\"category\">".concat(categories.map(function (category) { return "<option>".concat(escapeHtml(category), "</option>"); }).join(""), "</select></label><label>Medio<select name=\"method\"><option value=\"Efectivo\">\uD83D\uDCB5 Efectivo</option><option value=\"Transferencia\">\uD83C\uDFE6 Transferencia</option></select></label><label>Importe<input name=\"amount\" type=\"number\" min=\"0\" required /></label><label>Descripci\u00F3n<input name=\"description\" required /></label><button class=\"primary full\">Guardar ").concat(type.toLowerCase(), "</button></form>"), function (form) {
+    openModal("".concat(type, " de caja"), "<form class=\"form-grid\"><label>Categor\u00EDa<select name=\"category\">".concat(categories.map(function (category) { return "<option>".concat(escapeHtml(category), "</option>"); }).join(""), "</select></label><label>Medio<select name=\"method\"><option value=\"Efectivo\">Efectivo</option><option value=\"Transferencia\">Transferencia</option></select></label><label>Importe<input name=\"amount\" type=\"number\" min=\"0\" required /></label><label>Descripci\u00F3n<input name=\"description\" required /></label><button class=\"primary full\">Guardar ").concat(type.toLowerCase(), "</button></form>"), function (form) {
         state.cash.push(__assign({ id: nextId(state.cash), type: type, date: new Date().toISOString() }, formDataToObject(form)));
         saveState();
         closeModal();
         render();
     });
+}
+function exportData() {
+    var text = JSON.stringify(state, null, 2);
+    if (window.navigator && navigator.clipboard)
+        navigator.clipboard.writeText(text);
+    else
+        prompt("Copiá este backup para llevarlo a otro navegador", text);
+    alert("Backup preparado. Recordá: Chrome, Firefox y Edge no comparten datos locales entre sí.");
+}
+function importData() {
+    var text = prompt("Pegá acá el backup exportado");
+    if (!text)
+        return;
+    try {
+        storageSet(STORAGE_KEY, text);
+        state = loadState();
+        render();
+        alert("Datos importados correctamente.");
+    }
+    catch (error) {
+        alert("No se pudo importar el backup. Revisá que el texto esté completo.");
+    }
 }
 function saveSettings() {
     ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappMessage", "whatsappRetiredMessage", "storageNoticeText", "cashPin"].forEach(function (key) { return state.settings[key] = document.getElementById(key).value; });
