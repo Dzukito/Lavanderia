@@ -80,7 +80,8 @@ function loadState() {
   merged.orders = merged.orders.map((order) => {
     const paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
     const status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
-    return { ...order, status, paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [] };
+    const items = order.items?.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0) }];
+    return { ...order, status, paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items };
   });
 
   return merged;
@@ -297,7 +298,24 @@ document.addEventListener("change", (event) => {
 });
 
 function orderDisplayCode(order) {
-  return order.location ? `${order.location} - ${order.id}` : `Sin depósito - ${order.id}`;
+  return order.location ? `${order.location}-#${String(order.id).padStart(4, "0")}` : `Sin depósito-#${String(order.id).padStart(4, "0")}`;
+}
+
+function itemSummary(order) {
+  return (order.items || []).map((item) => `${item.name} (${money(item.price)})`).join(" · ") || serviceSummary(order);
+}
+
+function paymentBadge(order) {
+  const status = order.paymentStatus || "Pendiente";
+  return `<span class="payment-badge ${status === "Abonado" ? "paid" : "due"}">${status === "Abonado" ? "✅ Abonado" : "🟠 Pendiente"}</span>`;
+}
+
+function paymentMethodLabel(method) {
+  return method === "Transferencia" ? "🏦 Transferencia" : "💵 Efectivo";
+}
+
+function nextFreeLocation() {
+  return availableLocations()[0]?.code || "";
 }
 
 let dashboardTab = "Pendiente";
@@ -372,11 +390,11 @@ function orderCards(orders, title, compact = false) {
       <div class="order-card-list">${orders.map((order) => `
         <article class="order-card ${normalizeClass(orderGroup(order))}">
           <div class="order-main"><strong class="order-code">${escapeHtml(orderDisplayCode(order))}</strong><span class="badge ${normalizeClass(orderGroup(order))}">${escapeHtml(orderGroup(order))}</span></div>
-          <div><strong>${escapeHtml(orderClient(order))}</strong><br><small>${escapeHtml(serviceSummary(order))} · ${Number(order.valets || 0)} valet(s) · ${formatDateTime(order.estimate)}</small></div>
+          <div><strong>${escapeHtml(orderClient(order))}</strong><br><small>${escapeHtml(itemSummary(order))} · ${formatDateTime(order.estimate)}</small></div>
           <p class="order-notes">${escapeHtml(order.notes || "Sin observaciones")}</p>
-          <div class="order-meta"><span>Pago: ${escapeHtml(order.paymentStatus || "Pendiente")}</span><span>Total: ${money(order.total)}</span></div>
+          <div class="order-meta"><span>Pago: ${paymentBadge(order)} ${paymentMethodLabel(order.paymentMethod)}</span><span>Total: ${money(order.total)}</span></div>
           <div class="actions"><button class="secondary" data-action="orderState" data-id="${order.id}">Estado</button><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button></div>
-        </article>`).join("") || `<p class="notice">No hay pedidos para mostrar.</p>`}</div>
+        </article>`).join("") || `<p>No hay pedidos para mostrar.</p>`}</div>
     </div>`;
 }
 
@@ -408,7 +426,7 @@ function renderSchedule() {
   const closeHour = Number(state.settings.closeHour.split(":")[0]);
   const hours = Array.from({ length: Math.max(1, closeHour - openHour) }, (_, index) => openHour + index);
   const washDryMinutes = Number(state.settings.washingMinutes) + Number(state.settings.dryingMinutes);
-  const preview = schedulePreview ? `<div class="notice preview-box"><strong>Estimación manual:</strong> ${escapeHtml(schedulePreview.client)} · ${escapeHtml(schedulePreview.service)} tarda aprox. <strong>${schedulePreview.minutes} minutos</strong>. Si entra ${formatDateTime(schedulePreview.start)}, estaría listo ${formatDateTime(schedulePreview.end)}.</div>` : "";
+  const preview = "";
 
   document.getElementById("schedule").innerHTML = `
     <div class="card hero-card"><div><p class="eyebrow-dark">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>${weekDays[0].toLocaleDateString("es-AR")}</strong>. Un valet lavado + secado ocupa aprox. <strong>${washDryMinutes} minutos</strong>, pero la estimación real depende de máquinas libres.</p></div><div class="status-pill light">${state.settings.smallWashers} lavarropas · ${state.settings.dryers} secadoras</div></div>
@@ -420,10 +438,7 @@ function renderSchedule() {
         return `<div class="timeline-cell">${cycles.map((cycle) => `<div class="timeline-event ${cycle.type === "Lavado" ? "wash" : "dry"}"><strong>${escapeHtml(orderClient(cycle.order))}</strong><span>${escapeHtml(cycle.type)} · ${escapeHtml(cycle.machine)}</span><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<span class="free-text">Libre</span>`}</div>`;
       }).join("")}`).join("")}
     </div></div>
-    <div class="card"><h3 class="machine-section-title">Lavadoras y secadoras</h3><div class="machine-board">${machines.map((machine) => {
-      const assigned = activeCycles.filter((cycle) => cycle.machine === machine.name).slice(0, 8);
-      return `<button class="machine machine-click type-${normalizeClass(machine.type)} ${assigned.length ? "occupied" : ""}" data-action="machineEdit" data-machine="${escapeHtml(machine.name)}"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${assigned.length ? "blocked" : machine.type === "Lavado" ? "en-lavado" : "en-secado"}">${assigned.length ? "Ocupada" : machine.type}</span>${assigned.map((cycle) => `<div class="slot"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong> ${escapeHtml(orderClient(cycle.order))}<br><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<div class="slot">Libre</div>`}</button>`;
-    }).join("")}</div></div>`;
+    <div class="card"><h3 class="machine-section-title">Lavarropas</h3>${machineBoard(machines.filter((machine) => machine.type === "Lavado"), activeCycles)}<h3 class="machine-section-title">Secadoras</h3>${machineBoard(machines.filter((machine) => machine.type === "Secado"), activeCycles)}</div>`;
 }
 
 function setScheduleWeek(value) {
@@ -437,6 +452,13 @@ function moveScheduleWeek(days) {
   setScheduleWeek(next.toISOString().slice(0, 10));
 }
 
+function machineBoard(machines, activeCycles) {
+  return `<div class="machine-board">${machines.map((machine) => {
+    const assigned = activeCycles.filter((cycle) => cycle.machine === machine.name).slice(0, 8);
+    return `<button class="machine machine-click type-${normalizeClass(machine.type)} ${assigned.length ? "occupied" : "free-machine"}" data-action="machineEdit" data-machine="${escapeHtml(machine.name)}"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${assigned.length ? "blocked" : "free-machine-badge"}">${assigned.length ? "Ocupada" : "Libre"}</span>${assigned.map((cycle) => `<div class="slot"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong><br><span>${escapeHtml(orderClient(cycle.order))}</span></div>`).join("") || `<div class="slot">Disponible</div>`}</button>`;
+  }).join("")}</div>`;
+}
+
 function openMachineModal(machineName) {
   selectedMachine = machineName;
   const assigned = state.orders
@@ -445,14 +467,13 @@ function openMachineModal(machineName) {
     .filter((cycle) => cycle.machine === machineName)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   openModal(`Máquina ${escapeHtml(machineName)}`, `
-    <div class="machine-modal-list">${assigned.map((cycle) => `<button class="slot machine-slot" data-action="openStorageOrder" data-id="${cycle.order.id}"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong>${escapeHtml(orderClient(cycle.order))}<small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></button>`).join("") || `<p class="notice">Máquina libre. No hay pedidos asignados.</p>`}</div>`);
+    <div class="machine-modal-list">${assigned.map((cycle) => `<button class="slot machine-slot" data-action="openStorageOrder" data-id="${cycle.order.id}"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong>${escapeHtml(orderClient(cycle.order))}<small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></button>`).join("") || `<p>Máquina libre. No hay pedidos asignados.</p>`}</div>`);
 }
 
 function renderStorage() {
   const occupied = new Map(state.orders.filter((order) => order.location && order.status !== "Retirado").map((order) => [order.location, order]));
   document.getElementById("storage").innerHTML = `
     <div class="card hero-card"><div><p class="eyebrow-dark">Depósito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hacé clic en una ubicación ocupada para abrir el pedido correspondiente.</p></div><button class="secondary" data-action="storageNotice">Ver aviso general</button></div>
-    <div class="notice legal-note"><strong>Aviso informativo:</strong> El texto de guarda es configurable y debe comunicarse de forma clara al recibir el pedido. Validar plazo y redacción final con asesoría local.</div>
     <div class="storage-grid">${state.locations.map((location) => {
       const order = occupied.get(location.code);
       return order
@@ -487,7 +508,7 @@ function cashReportHtml() {
       <div class="bar-list">${rows.map((row) => {
         const max = Math.max(row.income, row.expense, 1);
         return `<div class="bar-row"><div><strong>${row.month}</strong><small>Saldo ${money(row.balance)} · Efectivo ${money(row.cash)} · Transf. ${money(row.transfer)}</small></div><div class="bars"><span class="bar income" style="width:${Math.max(4, (row.income / max) * 100)}%"></span><span class="bar expense" style="width:${Math.max(4, (row.expense / max) * 100)}%"></span></div></div>`;
-      }).join("") || `<p class="notice">Cargá movimientos para ver la comparación mensual.</p>`}</div>
+      }).join("") || `<p>Cargá movimientos para ver la comparación mensual.</p>`}</div>
       <div class="table-wrap"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs mes anterior</th><th>Efectivo</th><th>Transferencia</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.month}</td><td>${money(row.income)}</td><td>${money(row.expense)}</td><td>${money(row.balance)}</td><td>${row.diff === null ? "-" : `${row.diff}%`}</td><td>${money(row.cash)}</td><td>${money(row.transfer)}</td></tr>`).join("") || `<tr><td colspan="7">Sin movimientos de caja.</td></tr>`}</tbody></table></div>
     </div>`;
 }
@@ -507,7 +528,7 @@ function renderCash() {
 }
 
 function cashTable() {
-  return `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>${[...state.cash].reverse().map((entry) => `<tr><td>${formatDateTime(entry.date)}</td><td>${escapeHtml(entry.type)}</td><td>${escapeHtml(entry.category)}</td><td>${escapeHtml(entry.description)}</td><td>${escapeHtml(entry.method)}</td><td>${money(entry.amount)}</td></tr>`).join("") || `<tr><td colspan="6">Sin movimientos.</td></tr>`}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>${[...state.cash].reverse().map((entry) => `<tr><td>${formatDateTime(entry.date)}</td><td>${escapeHtml(entry.type)}</td><td>${escapeHtml(entry.category)}</td><td>${escapeHtml(entry.description)}</td><td>${paymentMethodLabel(entry.method)}</td><td>${money(entry.amount)}</td></tr>`).join("") || `<tr><td colspan="6">Sin movimientos.</td></tr>`}</tbody></table></div>`;
 }
 
 function renderCashReports() {
@@ -560,30 +581,67 @@ function openClientModal(id) {
 
 
 function openOrderModal() {
+  const defaultLocation = nextFreeLocation();
+  const firstService = state.services[0];
   const modal = openModal("Nuevo pedido", `<form class="form-grid">
     <label>Cliente<select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)} · ${escapeHtml(client.phone)}</option>`).join("")}</select></label>
-    <label>Servicio<select name="serviceId" data-service-select required>${state.services.map((service) => `<option value="${service.id}" data-price="${service.price}">${escapeHtml(service.name)} · ${money(service.price)}</option>`).join("")}</select></label>
-    <label>Cantidad de valets<input name="valets" type="number" min="0" value="1" /></label>
-    <label>Paquetes / bolsas<input name="packages" type="number" min="1" value="1" /></label>
-    <label>Precio total<input name="total" type="number" min="0" value="${state.services[0]?.price || 0}" /></label>
-    <label>Ubicación depósito<select name="location"><option value="">Asignar luego</option>${availableLocations().map((location) => `<option>${escapeHtml(location.code)}</option>`).join("")}</select></label>
+    <label>Depósito<select name="location" required>${availableLocations().map((location) => `<option ${location.code === defaultLocation ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
     <label>Pago<select name="paymentStatus"><option>Pendiente</option><option>Abonado</option></select></label>
-    <label>Medio de pago<select name="paymentMethod"><option>Efectivo</option><option>Transferencia</option></select></label>
-    <label class="full">Observaciones<textarea name="notes" placeholder="Prendas delicadas, manchas, indicaciones..."></textarea></label>
+    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo">💵 Efectivo</option><option value="Transferencia">🏦 Transferencia</option></select></label>
+    <div class="full items-builder"><h3>Prendas / trabajos</h3><div data-items-list>
+      ${orderItemRow(firstService?.id || 1, firstService?.price || 0, "")}
+    </div><button class="secondary" type="button" data-add-item>+ Agregar prenda</button></div>
+    <label>Precio total<input name="total" data-items-total type="number" min="0" value="${firstService?.price || 0}" /></label>
+    <label class="full">Observaciones<textarea name="notes" placeholder="Ej: Frasada polar roja, manchas, preferencias..."></textarea></label>
     <button class="primary full">Crear pedido</button>
   </form>`, (form) => {
     const data = Object.fromEntries(form.entries());
     const createdAt = new Date().toISOString();
-    const service = getService(data.serviceId);
-    const schedule = createOrderSchedule(service, createdAt);
+    const items = collectItems(form);
+    const primaryService = getService(items[0]?.serviceId || firstService?.id);
+    const schedule = createOrderSchedule(primaryService, createdAt);
     const orderId = nextId(state.orders);
-    const location = data.location || "";
-    const order = { id: orderId, number: location ? `${location} - ${orderId}` : `Sin depósito - ${orderId}`, clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+    const location = data.location || nextFreeLocation();
+    const total = Number(data.total || items.reduce((sum, item) => sum + Number(item.price || 0), 0));
+    const order = { id: orderId, number: `${location}-#${String(orderId).padStart(4, "0")}`, clientId: Number(data.clientId), serviceId: Number(primaryService.id), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items, total, location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
     state.orders.push(order);
     if (order.paymentStatus === "Abonado") syncOrderPayment(order);
     saveState(); closeModal(); setView("orders");
   });
-  modal.querySelector("[data-service-select]")?.dispatchEvent(new Event("change", { bubbles: true }));
+  attachItemBuilder(modal);
+}
+
+function orderItemRow(serviceId, price, name = "") {
+  return `<div class="item-row"><input name="itemName" placeholder="Ej: Frasada polar roja" value="${escapeHtml(name)}" /><select name="itemService">${state.services.map((service) => `<option value="${service.id}" data-price="${service.price}" ${Number(service.id) === Number(serviceId) ? "selected" : ""}>${escapeHtml(service.name)}</option>`).join("")}</select><input name="itemPrice" type="number" min="0" value="${Number(price || 0)}" /><button class="danger" type="button" data-remove-item>×</button></div>`;
+}
+
+function attachItemBuilder(modal) {
+  const list = modal.querySelector("[data-items-list]");
+  const recalc = () => {
+    const total = [...modal.querySelectorAll('[name="itemPrice"]')].reduce((sum, input) => sum + Number(input.value || 0), 0);
+    modal.querySelector("[data-items-total]").value = total;
+  };
+  modal.addEventListener("click", (event) => {
+    if (event.target.matches("[data-add-item]")) { list.insertAdjacentHTML("beforeend", orderItemRow(state.services[0].id, state.services[0].price)); recalc(); }
+    if (event.target.matches("[data-remove-item]")) { event.target.closest(".item-row")?.remove(); recalc(); }
+  });
+  modal.addEventListener("change", (event) => {
+    if (event.target.matches('[name="itemService"]')) {
+      const price = event.target.selectedOptions[0]?.dataset.price || 0;
+      event.target.closest(".item-row").querySelector('[name="itemPrice"]').value = price;
+      recalc();
+    }
+  });
+  modal.addEventListener("input", (event) => { if (event.target.matches('[name="itemPrice"]')) recalc(); });
+}
+
+function collectItems(form) {
+  const rows = [...form.querySelectorAll(".item-row")];
+  return rows.map((row) => {
+    const serviceId = Number(row.querySelector('[name="itemService"]').value);
+    const service = getService(serviceId);
+    return { name: row.querySelector('[name="itemName"]').value || service.name, serviceId, serviceName: service.name, price: Number(row.querySelector('[name="itemPrice"]').value || 0) };
+  }).filter((item) => item.name || item.price);
 }
 
 function syncOrderPayment(order) {
@@ -594,7 +652,7 @@ function syncOrderPayment(order) {
     return;
   }
 
-  const payment = { type: "Ingreso", category: "Pedido", description: `Cobro pedido #${order.number}`, method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
+  const payment = { type: "Ingreso", category: "Pedido", description: `${orderClient(order)} ${orderDisplayCode(order)}`, method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
   if (existing) Object.assign(existing, payment);
   else state.cash.push({ id: nextId(state.cash), date: new Date().toISOString(), ...payment });
   order.paymentSynced = true;
@@ -609,7 +667,7 @@ function openOrderEditModal(id) {
   openModal(`Editar pedido ${escapeHtml(order.number)}`, `<form class="form-grid">
     <label>Depósito / número<select name="location"><option value="">Sin asignar</option>${locations.map((location) => `<option ${location.code === order.location ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
     <label>Pago<select name="paymentStatus"><option ${order.paymentStatus !== "Abonado" ? "selected" : ""}>Pendiente</option><option ${order.paymentStatus === "Abonado" ? "selected" : ""}>Abonado</option></select></label>
-    <label>Medio de pago<select name="paymentMethod"><option ${order.paymentMethod !== "Transferencia" ? "selected" : ""}>Efectivo</option><option ${order.paymentMethod === "Transferencia" ? "selected" : ""}>Transferencia</option></select></label>
+    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo" ${order.paymentMethod !== "Transferencia" ? "selected" : ""}>💵 Efectivo</option><option value="Transferencia" ${order.paymentMethod === "Transferencia" ? "selected" : ""}>🏦 Transferencia</option></select></label>
     <label>Precio total<input name="total" type="number" min="0" value="${Number(order.total || 0)}" /></label>
     <label class="full">Observaciones<textarea name="notes">${escapeHtml(order.notes || "")}</textarea></label>
     <button class="primary full">Guardar cambios</button>
@@ -677,7 +735,6 @@ function openStorageNoticeModal(id) {
   const order = id ? getOrder(id) : null;
   const text = storageNoticeText(order);
   openModal(order ? `Cartel depósito #${escapeHtml(order.number)}` : "Cartel general de depósito", `
-    <div class="notice legal-note">Usar como aviso comercial/condición informada. Revisar con asesoría legal local antes de imprimir o enviar.</div>
     <textarea class="notice-text" readonly>${escapeHtml(text)}</textarea>
     <div class="actions"><button class="primary" data-action="copyNotice">Copiar cartel</button>${order ? `<button class="success" data-action="sendStorageNotice" data-id="${order.id}">Enviar al cliente</button>` : ""}</div>`);
 }
@@ -703,7 +760,7 @@ function unlockCash() {
 
 function openCashModal(type) {
   const categories = type === "Ingreso" ? ["Pedido", "Seña", "Otro"] : ["Agua", "Luz", "Gas", "Insumos", "Alquiler", "Otros servicios"];
-  openModal(`${type} de caja`, `<form class="form-grid"><label>Categoría<select name="category">${categories.map((category) => `<option>${escapeHtml(category)}</option>`).join("")}</select></label><label>Medio<select name="method"><option>Efectivo</option><option>Transferencia</option></select></label><label>Importe<input name="amount" type="number" min="0" required /></label><label>Descripción<input name="description" required /></label><button class="primary full">Guardar ${type.toLowerCase()}</button></form>`, (form) => {
+  openModal(`${type} de caja`, `<form class="form-grid"><label>Categoría<select name="category">${categories.map((category) => `<option>${escapeHtml(category)}</option>`).join("")}</select></label><label>Medio<select name="method"><option value="Efectivo">💵 Efectivo</option><option value="Transferencia">🏦 Transferencia</option></select></label><label>Importe<input name="amount" type="number" min="0" required /></label><label>Descripción<input name="description" required /></label><button class="primary full">Guardar ${type.toLowerCase()}</button></form>`, (form) => {
     state.cash.push({ id: nextId(state.cash), type, date: new Date().toISOString(), ...Object.fromEntries(form.entries()) });
     saveState(); closeModal(); render();
   });

@@ -26,6 +26,9 @@ for (const feature of [
   'renderCashReports',
   'orderDisplayCode',
   'openMachineModal',
+  'collectItems',
+  'paymentBadge',
+  'paymentMethodLabel',
   'currentWeekDays',
   'setScheduleWeek',
     'openStorageOrder',
@@ -37,13 +40,16 @@ for (const feature of [
 assert.doesNotMatch(app, /oninput=/, 'orders search should use delegated events instead of inline handlers');
 assert.doesNotMatch(app, /onclick=/, 'modals should use delegated actions instead of inline handlers');
 assert.match(app, /paymentStatus/, 'orders should track payment status');
+assert.doesNotMatch(app, /Cantidad de valets/, 'new order should use manual items instead of valet quantity');
+assert.match(app, /data-items-list/, 'new order should include manual item rows');
+assert.match(app, /description: `\$\{orderClient\(order\)\} \$\{orderDisplayCode\(order\)\}`/, 'cash payment description should include client and order code');
 assert.match(app, /const STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
 assert.match(app, /if \(view === \"cash\"\) cashUnlocked = false/, 'cash view should request PIN every time');
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 

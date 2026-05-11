@@ -20,7 +20,7 @@ Luego abrir `http://localhost:8080`.
 ## Funciones incluidas
 
 - Clientes con nombre, teléfono, dirección, notas, historial de pedidos y personas autorizadas a retirar.
-- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2 - 1001`, servicio, valets, paquetes, estado simple, horario estimado, precio, pago, medio de pago y observaciones visibles.
+- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2 - 1001`, prendas/trabajos manuales, estado simple, horario estimado, precio, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
 - Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.
@@ -37,7 +37,7 @@ Luego abrir `http://localhost:8080`.
 
 1. Cargar o buscar cliente.
 2. Crear pedido desde **Nuevo pedido**.
-3. Elegir servicio, valets, paquetes, precio y ubicación de depósito si ya se conoce.
+3. Elegir depósito, cargar cada prenda/trabajo con su servicio y precio, y revisar el total.
 4. Cambiar el estado con el botón **Estado** y editar datos de pago/observaciones con **Editar**.
 5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.

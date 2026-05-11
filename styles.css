@@ -221,3 +221,24 @@ tr:hover td { background: #f8fbff; }
 .cash-section { min-height: 260px; }
 .cash-report-section { margin-top: 0; }
 @media (max-width: 920px) { .schedule-controls { grid-template-columns: 1fr; } .big-action { min-width: 0; } }
+
+/* Latest laundry feedback refinements */
+.tab-button.active { background: white; border-color: var(--line); }
+.tab-button.active strong { color: var(--primary); }
+.tab-button.active[data-tab="Pendiente"] { background: #fff4e6; border-color: var(--warning); }
+.tab-button.active[data-tab="Pendiente"] strong { color: #d9480f; }
+.tab-button.active[data-tab="Listo"] { background: #ebfbee; border-color: var(--accent); }
+.tab-button.active[data-tab="Listo"] strong { color: #2b8a3e; }
+.tab-button.active[data-tab="Retirado"] { background: #f3f0ff; border-color: #7048e8; }
+.tab-button.active[data-tab="Retirado"] strong { color: #7048e8; }
+.client-avatar { background: #eaf1ff; color: var(--primary-dark); font-size: 34px; }
+.client-avatar::before { content: none; }
+.items-builder { background: #f8fbff; border: 2px solid var(--line); border-radius: 18px; padding: 14px; }
+.item-row { display: grid; gap: 10px; grid-template-columns: 1.4fr 1fr 150px 54px; margin-bottom: 10px; }
+.payment-badge { border-radius: 999px; display: inline-flex; font-weight: 900; padding: 5px 10px; }
+.payment-badge.paid { background: #d3f9d8; color: #2b8a3e; }
+.payment-badge.due { background: #fff4e6; color: #d9480f; }
+.machine.free-machine { background: #ebfbee; border-color: #8ce99a; }
+.free-machine-badge { background: #d3f9d8; color: #2b8a3e; }
+.machine-board + .machine-section-title { margin-top: 24px; }
+@media (max-width: 920px) { .item-row { grid-template-columns: 1fr; } }
