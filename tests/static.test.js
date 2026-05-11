@@ -51,9 +51,10 @@ assert.doesNotMatch(app, /\|\|=/, 'app should avoid logical assignment to suppor
 assert.doesNotMatch(app, /Object\.fromEntries/, 'app should avoid Object.fromEntries to support older browsers');
 assert.doesNotMatch(app, /dateStyle|timeStyle/, 'app should avoid newer Intl dateStyle/timeStyle options');
 assert.doesNotMatch(app, /Number\.isNaN/, 'app should avoid Number.isNaN to support older browsers');
+assert.doesNotMatch(app, /Array\.from|Object\.entries|new Map|new Set|selectedOptions|\.dataset/, 'startup path should avoid fragile modern DOM/runtime helpers');
 assert.doesNotMatch(app + scheduler + polyfills, /=>|`|\bconst\b|\blet\b|\?\./, 'runtime scripts should avoid syntax that breaks old browsers at parse time');
 assert.match(html, /polyfills\.js[\s\S]*scheduler\.js[\s\S]*app\.js/, 'polyfills should load before runtime scripts');
-assert.match(polyfills, /Array\.from/, 'polyfills should cover Array.from used by compiled scripts');
+assert.match(polyfills, /Array\.from/, 'polyfills should still cover Array.from if future code needs it');
 assert.match(polyfills, /window\.Map/, 'polyfills should cover Map used by compiled scripts');
 assert.match(polyfills, /elementPrototype\.closest/, 'polyfills should cover delegated click helpers');
 assert.doesNotMatch(app, /Cantidad de valets/, 'new order should use manual items instead of valet quantity');

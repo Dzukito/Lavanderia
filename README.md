@@ -64,6 +64,7 @@ Fuentes de referencia:
 npm test
 node --check app.js
 node --check scheduler.js
+node tests/startup.test.js
 ```
 
 ## Nota para producción

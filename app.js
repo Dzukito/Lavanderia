@@ -23,7 +23,12 @@ window.addEventListener("error", function (event) {
     var root = document.querySelector(".content");
     if (!root)
         return;
-    root.innerHTML = "<section class=\"view active\"><div class=\"card\"><h2>No se pudo iniciar el sistema</h2><p>Prob\u00E1 actualizar el navegador o abrir el sistema con <code>python3 -m http.server 8080</code>.</p><p><strong>Detalle:</strong> ".concat(event.message, "</p></div></section>");
+    var detail = event && event.message ? event.message : "Error desconocido";
+    if (event && event.filename)
+        detail += " (" + event.filename + ":" + (event.lineno || "?") + ":" + (event.colno || "?") + ")";
+    if (event && event.error && event.error.stack)
+        detail += "\n" + event.error.stack;
+    root.innerHTML = "<section class=\"view active\"><div class=\"card\"><h2>No se pudo iniciar el sistema</h2><p>Prob\u00E1 actualizar el navegador o abrir el sistema con <code>python3 -m http.server 8080</code>.</p><p><strong>Detalle:</strong></p><pre class=\"error-detail\">".concat(escapeHtml(detail), "</pre></div></section>" );
 });
 var STORAGE_KEY = "lavanderia-local-v1";
 var STATES = ["Pendiente", "Listo", "Retirado"];
@@ -55,7 +60,7 @@ var defaultData = {
     ],
     orders: [],
     cash: [],
-    locations: flatten(["A", "B", "C", "D", "E", "F"].map(function (row) { return Array.from({ length: 6 }, function (_, index) { return "".concat(row).concat(index + 1); }); })).map(function (code, index) { return ({ id: index + 1, code: code }); }),
+    locations: buildDefaultLocations(),
 };
 function cloneData(value) {
     try {
@@ -68,6 +73,24 @@ function cloneData(value) {
 }
 function safeReplaceAll(value, search, replacement) {
     return String(value).split(search).join(replacement);
+}
+function buildDefaultLocations() {
+    var rows = ["A", "B", "C", "D", "E", "F"];
+    var locations = [];
+    for (var rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        for (var slot = 1; slot <= 6; slot += 1) {
+            locations.push({ id: locations.length + 1, code: rows[rowIndex] + slot });
+        }
+    }
+    return locations;
+}
+function forEachNode(nodes, callback) {
+    for (var index = 0; index < nodes.length; index += 1) callback(nodes[index], index);
+}
+function listFrom(nodes) {
+    var list = [];
+    for (var index = 0; index < nodes.length; index += 1) list.push(nodes[index]);
+    return list;
 }
 function storageGet(key) {
     try {
@@ -90,13 +113,16 @@ function storageSet(key, value) {
 function formDataToObject(form) {
     var result = {};
     if (window.FormData) {
-        var data = new FormData(form);
-        if (data.forEach) {
-            data.forEach(function (value, key) { result[key] = value; });
-            return result;
+        try {
+            var data = new FormData(form);
+            if (data.forEach) {
+                data.forEach(function (value, key) { result[key] = value; });
+                return result;
+            }
         }
+        catch (error) {}
     }
-    Array.from(form.elements).forEach(function (field) {
+    forEachNode(form.elements || [], function (field) {
         if (field.name && !field.disabled)
             result[field.name] = field.value;
     });
@@ -119,8 +145,19 @@ var scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
 var schedulePreview = null;
 function mergeLocations(defaultLocations, savedLocations) {
     if (savedLocations === void 0) { savedLocations = []; }
-    var byCode = new Map(__spreadArray(__spreadArray([], defaultLocations, true), (savedLocations || []), true).map(function (location, index) { return [location.code, { id: index + 1, code: location.code }]; }));
-    return __spreadArray([], byCode.values(), true).map(function (location, index) { return (__assign(__assign({}, location), { id: index + 1 })); });
+    var result = [];
+    function addLocation(location) {
+        if (!location || !location.code)
+            return;
+        for (var index = 0; index < result.length; index += 1) {
+            if (result[index].code === location.code)
+                return;
+        }
+        result.push({ id: result.length + 1, code: location.code });
+    }
+    defaultLocations.forEach(addLocation);
+    (savedLocations || []).forEach(addLocation);
+    return result;
 }
 function currentWeekStart(reference) {
     var day = reference.getDay() || 7;
@@ -156,7 +193,13 @@ function saveState() {
     storageSet(STORAGE_KEY, JSON.stringify(state));
 }
 function money(value) {
-    return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(Number(value || 0));
+    var amount = Number(value || 0);
+    try {
+        if (window.Intl && window.Intl.NumberFormat)
+            return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(amount);
+    }
+    catch (error) {}
+    return "$ " + Math.round(amount);
 }
 function formatDateTime(value) {
     if (!value)
@@ -199,10 +242,11 @@ function escapeHtml(value) {
 }
 function availableLocations(currentOrderId) {
     if (currentOrderId === void 0) { currentOrderId = null; }
-    var busy = new Set(state.orders
-        .filter(function (order) { return order.id !== Number(currentOrderId) && order.location && order.status !== "Retirado"; })
-        .map(function (order) { return order.location; }));
-    return state.locations.filter(function (location) { return !busy.has(location.code); });
+    var busy = {};
+    state.orders.filter(function (order) { return order.id !== Number(currentOrderId) && order.location && order.status !== "Retirado"; }).forEach(function (order) {
+        busy[order.location] = true;
+    });
+    return state.locations.filter(function (location) { return !busy[location.code]; });
 }
 function createOrderSchedule(service, createdAt) {
     return LaundryScheduler.scheduleOrder(state.orders, service, state.settings, createdAt);
@@ -210,11 +254,13 @@ function createOrderSchedule(service, createdAt) {
 function currentWeekDays(reference) {
     if (reference === void 0) { reference = new Date(); }
     var monday = currentWeekStart(reference);
-    return Array.from({ length: 5 }, function (_, index) {
+    var days = [];
+    for (var index = 0; index < 5; index += 1) {
         var date = new Date(monday);
         date.setDate(monday.getDate() + index);
-        return date;
-    });
+        days.push(date);
+    }
+    return days;
 }
 function dateKey(date) {
     return new Date(date).toISOString().slice(0, 10);
@@ -250,11 +296,18 @@ function monthlyCashSummary() {
         if (entry.method === "Transferencia")
             summary[key].transfer += entry.type === "Ingreso" ? amount : -amount;
     });
-    return Object.entries(summary).sort().map(function (_a, index, list) {
-        var month = _a[0], values = _a[1];
+    var months = [];
+    for (var month in summary) {
+        if (Object.prototype.hasOwnProperty.call(summary, month))
+            months.push(month);
+    }
+    months.sort();
+    return months.map(function (month, index) {
+        var values = summary[month];
         var balance = values.income - values.expense;
-        var prevBalance = index > 0 ? list[index - 1][1].income - list[index - 1][1].expense : null;
-        var diff = prevBalance ? Math.round(((balance - prevBalance) / Math.abs(prevBalance)) * 100) : null;
+        var previousValues = index > 0 ? summary[months[index - 1]] : null;
+        var previous = previousValues ? previousValues.income - previousValues.expense : null;
+        var diff = previous ? Math.round(((balance - previous) / Math.abs(previous)) * 100) : null;
         return __assign(__assign({ month: month }, values), { balance: balance, diff: diff });
     });
 }
@@ -269,17 +322,29 @@ function messageForOrder(order, type) {
     var paymentText = isPaid ? "Ya figura pago por ".concat(order.paymentMethod || "medio registrado", ".") : unpaidText;
     return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", order.number || order.location || ""), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
 }
+function safeRenderView(id, callback) {
+    try {
+        callback();
+    }
+    catch (error) {
+        var target = document.getElementById(id);
+        if (target)
+            target.innerHTML = "<div class=\"card\"><h2>La secci\u00F3n no pudo cargar</h2><pre class=\"error-detail\">".concat(escapeHtml(error && (error.stack || error.message) || error), "</pre></div>");
+        if (window.console && console.error)
+            console.error("No se pudo renderizar " + id, error);
+    }
+}
 function render() {
-    document.querySelectorAll(".view").forEach(function (view) { return view.classList.toggle("active", view.id === currentView); });
-    document.querySelectorAll(".nav-button").forEach(function (button) { return button.classList.toggle("active", button.dataset.view === currentView); });
-    renderDashboard();
-    renderOrders();
-    renderClients();
-    renderSchedule();
-    renderStorage();
-    renderCash();
-    renderCashReports();
-    renderSettings();
+    forEachNode(document.querySelectorAll(".view"), function (view) { return view.classList.toggle("active", view.id === currentView); });
+    forEachNode(document.querySelectorAll(".nav-button"), function (button) { return button.classList.toggle("active", button.getAttribute("data-view") === currentView); });
+    safeRenderView("dashboard", renderDashboard);
+    safeRenderView("orders", renderOrders);
+    safeRenderView("clients", renderClients);
+    safeRenderView("schedule", renderSchedule);
+    safeRenderView("storage", renderStorage);
+    safeRenderView("cash", renderCash);
+    safeRenderView("cashReports", renderCashReports);
+    safeRenderView("settings", renderSettings);
 }
 function setView(view) {
     if (view === "cash")
@@ -287,20 +352,20 @@ function setView(view) {
     currentView = view;
     render();
 }
-document.querySelectorAll(".nav-button").forEach(function (button) { return button.addEventListener("click", function () { return setView(button.dataset.view); }); });
+forEachNode(document.querySelectorAll(".nav-button"), function (button) { return button.addEventListener("click", function () { return setView(button.getAttribute("data-view")); }); });
 document.addEventListener("click", function (event) {
     var target = event.target.closest("[data-action]");
     if (!target)
         return;
-    var action = target.dataset.action;
-    var id = target.dataset.id;
+    var action = target.getAttribute("data-action");
+    var id = target.getAttribute("data-id");
     var handlers = {
         newOrder: openOrderModal,
         newClient: openClientModal,
         editClient: function () { return openClientModal(id); },
         editOrderStatus: function () { return openOrderEditModal(id); },
         orderState: function () { return openOrderStateModal(id); },
-        dashboardTab: function () { return setDashboardTab(target.dataset.tab); },
+        dashboardTab: function () { return setDashboardTab(target.getAttribute("data-tab")); },
         clearOrderDate: clearOrderDate,
         whatsapp: function () { return openWhatsappMenu(id); },
         storageNotice: function () { return openStorageNoticeModal(id); },
@@ -308,10 +373,10 @@ document.addEventListener("click", function (event) {
         prevWeek: function () { return moveScheduleWeek(-7); },
         nextWeek: function () { return moveScheduleWeek(7); },
         todayWeek: function () { return setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)); },
-        sendWhatsapp: function () { return sendWhatsapp(id, target.dataset.messageType); },
+        sendWhatsapp: function () { return sendWhatsapp(id, target.getAttribute("data-message-type")); },
         copyNotice: copyVisibleNotice,
         sendStorageNotice: function () { return sendStorageNotice(id); },
-        machineEdit: function () { return openMachineModal(target.dataset.machine); },
+        machineEdit: function () { return openMachineModal(target.getAttribute("data-machine")); },
         cashIncome: function () { return openCashModal("Ingreso"); },
         cashExpense: function () { return openCashModal("Egreso"); },
         unlockCash: unlockCash,
@@ -336,11 +401,11 @@ document.addEventListener("change", function (event) {
     }
     if (!event.target.matches("[data-service-select]"))
         return;
-    var selected = event.target.selectedOptions[0];
+    var selected = event.target.options[event.target.selectedIndex];
     var form = event.target.closest("form");
     var priceInput = form ? form.querySelector("[name='total']") : null;
-    if (priceInput && selected && selected.dataset.price)
-        priceInput.value = selected.dataset.price;
+    if (priceInput && selected && selected.getAttribute("data-price"))
+        priceInput.value = selected.getAttribute("data-price");
 });
 function orderDisplayCode(order) {
     return order.location ? "".concat(order.location, "-#").concat(String(order.id).padStart(4, "0")) : "Sin dep\u00F3sito-#".concat(String(order.id).padStart(4, "0"));
@@ -427,7 +492,9 @@ function renderSchedule() {
     var weekDays = currentWeekDays(new Date("".concat(scheduleWeekStart, "T00:00:00")));
     var openHour = Number(state.settings.openHour.split(":")[0]);
     var closeHour = Number(state.settings.closeHour.split(":")[0]);
-    var hours = Array.from({ length: Math.max(1, closeHour - openHour) }, function (_, index) { return openHour + index; });
+    var hours = [];
+    for (var hourIndex = 0; hourIndex < Math.max(1, closeHour - openHour); hourIndex += 1)
+        hours.push(openHour + hourIndex);
     var washDryMinutes = Number(state.settings.washingMinutes) + Number(state.settings.dryingMinutes);
     var preview = "";
     document.getElementById("schedule").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>".concat(weekDays[0].toLocaleDateString("es-AR"), "</strong>. Un valet lavado + secado ocupa aprox. <strong>").concat(washDryMinutes, " minutos</strong>, pero la estimaci\u00F3n real depende de m\u00E1quinas libres.</p></div><div class=\"status-pill light\">").concat(state.settings.smallWashers, " lavarropas \u00B7 ").concat(state.settings.dryers, " secadoras</div></div>\n    <div class=\"card schedule-controls\"><button class=\"secondary\" data-action=\"prevWeek\">\u2190</button><label>Semana<input class=\"week-input\" type=\"date\" data-schedule-week value=\"").concat(scheduleWeekStart, "\" /></label><button class=\"secondary\" data-action=\"todayWeek\">Hoy</button><button class=\"secondary\" data-action=\"nextWeek\">\u2192</button>").concat(preview, "</div>\n    <div class=\"card schedule-card\"><h3>Semana seleccionada</h3><div class=\"timeline-grid\" style=\"--days:").concat(weekDays.length, "\">\n      <div class=\"timeline-head\">Hora</div>").concat(weekDays.map(function (day) { return "<div class=\"timeline-head\">".concat(day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" }), "</div>"); }).join(""), "\n      ").concat(hours.map(function (hour) { return "<div class=\"timeline-hour\">".concat(hourLabel(hour), "</div>").concat(weekDays.map(function (day) {
@@ -460,9 +527,12 @@ function openMachineModal(machineName) {
     openModal("M\u00E1quina ".concat(escapeHtml(machineName)), "\n    <div class=\"machine-modal-list\">".concat(assigned.map(function (cycle) { return "<button class=\"slot machine-slot\" data-action=\"openStorageOrder\" data-id=\"".concat(cycle.order.id, "\"><strong>").concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong>").concat(escapeHtml(orderClient(cycle.order)), "<small>").concat(formatDateTime(cycle.start), " \u2192 ").concat(formatDateTime(cycle.end), "</small></button>"); }).join("") || "<p>M\u00E1quina libre. No hay pedidos asignados.</p>", "</div>"));
 }
 function renderStorage() {
-    var occupied = new Map(state.orders.filter(function (order) { return order.location && order.status !== "Retirado"; }).map(function (order) { return [order.location, order]; }));
+    var occupied = {};
+    state.orders.filter(function (order) { return order.location && order.status !== "Retirado"; }).forEach(function (order) {
+        occupied[order.location] = order;
+    });
     document.getElementById("storage").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Dep\u00F3sito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hac\u00E9 clic en una ubicaci\u00F3n ocupada para abrir el pedido correspondiente.</p></div><button class=\"secondary\" data-action=\"storageNotice\">Ver aviso general</button></div>\n    <div class=\"storage-grid\">".concat(state.locations.map(function (location) {
-        var order = occupied.get(location.code);
+        var order = occupied[location.code];
         return order
             ? "<button class=\"location busy location-button\" data-action=\"openStorageOrder\" data-id=\"".concat(order.id, "\"><h3>").concat(escapeHtml(location.code), "</h3><strong>#").concat(escapeHtml(order.number), "</strong><span>").concat(escapeHtml(orderClient(order)), "</span><small>").concat(escapeHtml(order.status), "</small></button>")
             : "<article class=\"location free\"><h3>".concat(escapeHtml(location.code), "</h3>Libre</article>");
@@ -515,7 +585,7 @@ function openModal(title, html, onSubmit) {
     var form = modal.querySelector("form");
     if (form)
         form.addEventListener("submit", function (event) { event.preventDefault(); if (onSubmit)
-            onSubmit(new FormData(form)); });
+            onSubmit(form); });
     return modal;
 }
 function closeModal() {
@@ -528,7 +598,7 @@ function openClientModal(id) {
     openModal(id ? "Editar cliente" : "Nuevo cliente", "<form class=\"form-grid\"><label>Nombre<input name=\"name\" required value=\"".concat(escapeHtml(client.name), "\" /></label><label>Tel\u00E9fono WhatsApp<input name=\"phone\" required value=\"").concat(escapeHtml(client.phone), "\" /></label><label>Direcci\u00F3n<input name=\"address\" value=\"").concat(escapeHtml(client.address || ""), "\" /></label><label>Autorizados a retirar<input name=\"authorizedPickups\" placeholder=\"Ej: hijo Juan DNI...\" value=\"").concat(escapeHtml(client.authorizedPickups || ""), "\" /></label><label class=\"full\">Notas<input name=\"notes\" value=\"").concat(escapeHtml(client.notes || ""), "\" /></label><button class=\"primary full\">Guardar cliente</button></form>"), function (form) {
         var data = formDataToObject(form);
         if (id)
-            Object.assign(client, data);
+            for (var key in data) { if (Object.prototype.hasOwnProperty.call(data, key)) client[key] = data[key]; }
         else
             state.clients.push(__assign({ id: nextId(state.clients) }, data));
         saveState();
@@ -565,7 +635,7 @@ function orderItemRow(serviceId, price, name) {
 function attachItemBuilder(modal) {
     var list = modal.querySelector("[data-items-list]");
     var recalc = function () {
-        var total = Array.from(modal.querySelectorAll('[name="itemPrice"]')).reduce(function (sum, input) { return sum + Number(input.value || 0); }, 0);
+        var total = listFrom(modal.querySelectorAll('[name="itemPrice"]')).reduce(function (sum, input) { return sum + Number(input.value || 0); }, 0);
         modal.querySelector("[data-items-total]").value = total;
     };
     modal.addEventListener("click", function (event) {
@@ -584,7 +654,8 @@ function attachItemBuilder(modal) {
     });
     modal.addEventListener("change", function (event) {
         if (event.target.matches('[name="itemService"]')) {
-            var price = (event.target.selectedOptions[0] && event.target.selectedOptions[0].dataset.price) || 0;
+            var selectedOption = event.target.options[event.target.selectedIndex];
+            var price = (selectedOption && selectedOption.getAttribute("data-price")) || 0;
             event.target.closest(".item-row").querySelector('[name="itemPrice"]').value = price;
             recalc();
         }
@@ -593,7 +664,7 @@ function attachItemBuilder(modal) {
         recalc(); });
 }
 function collectItems(form) {
-    var rows = Array.from(form.querySelectorAll(".item-row"));
+    var rows = listFrom(form.querySelectorAll(".item-row"));
     return rows.map(function (row) {
         var serviceId = Number(row.querySelector('[name="itemService"]').value);
         var service = getService(serviceId);
@@ -609,7 +680,7 @@ function syncOrderPayment(order) {
     }
     var payment = { type: "Ingreso", category: "Pedido", description: "".concat(orderClient(order), " ").concat(orderDisplayCode(order)), method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
     if (existing)
-        Object.assign(existing, payment);
+        for (var paymentKey in payment) { if (Object.prototype.hasOwnProperty.call(payment, paymentKey)) existing[paymentKey] = payment[paymentKey]; }
     else
         state.cash.push(__assign({ id: nextId(state.cash), date: new Date().toISOString() }, payment));
     order.paymentSynced = true;

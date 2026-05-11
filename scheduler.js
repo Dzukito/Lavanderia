@@ -52,7 +52,11 @@
     }
     function machineNames(type, count) {
         var prefix = type === "Lavado" ? "Lavarropas chico" : "Secadora";
-        return Array.from({ length: Number(count || 1) }, function (_, index) { return "".concat(prefix, " ").concat(index + 1); });
+        var names = [];
+        for (var index = 0; index < Number(count || 1); index += 1) {
+            names.push("".concat(prefix, " ").concat(index + 1));
+        }
+        return names;
     }
     function buildResources(settings, existingOrders) {
         var resources = {

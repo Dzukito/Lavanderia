@@ -242,3 +242,12 @@ tr:hover td { background: #f8fbff; }
 .free-machine-badge { background: #d3f9d8; color: #2b8a3e; }
 .machine-board + .machine-section-title { margin-top: 24px; }
 @media (max-width: 920px) { .item-row { grid-template-columns: 1fr; } }
+
+.error-detail {
+  white-space: pre-wrap;
+  overflow-x: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 12px;
+}

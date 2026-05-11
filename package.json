@@ -3,6 +3,6 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "test": "node tests/scheduler.test.js && node tests/static.test.js"
+    "test": "node tests/scheduler.test.js && node tests/static.test.js && node tests/startup.test.js"
   }
 }
