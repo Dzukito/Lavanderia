@@ -1,3 +1,9 @@
+window.addEventListener("error", (event) => {
+  const root = document.querySelector(".content");
+  if (!root) return;
+  root.innerHTML = `<section class="view active"><div class="card"><h2>No se pudo iniciar el sistema</h2><p>Probá actualizar el navegador o abrir el sistema con <code>python3 -m http.server 8080</code>.</p><p><strong>Detalle:</strong> ${event.message}</p></div></section>`;
+});
+
 const STORAGE_KEY = "lavanderia-local-v1";
 const STATES = ["Pendiente", "Listo", "Retirado"];
 const defaultData = {
@@ -28,8 +34,25 @@ const defaultData = {
   ],
   orders: [],
   cash: [],
-  locations: ["A", "B", "C", "D", "E", "F"].flatMap((row) => Array.from({ length: 6 }, (_, index) => `${row}${index + 1}`)).map((code, index) => ({ id: index + 1, code })),
+  locations: flatten(["A", "B", "C", "D", "E", "F"].map((row) => Array.from({ length: 6 }, (_, index) => `${row}${index + 1}`))).map((code, index) => ({ id: index + 1, code })),
 };
+
+function cloneData(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    console.warn("No se pudo clonar la información inicial", error);
+    return value;
+  }
+}
+
+function safeReplaceAll(value, search, replacement) {
+  return String(value).split(search).join(replacement);
+}
+
+function flatten(list) {
+  return Array.prototype.concat.apply([], list);
+}
 
 let state = loadState();
 let currentView = "dashboard";
@@ -52,7 +75,7 @@ function currentWeekStart(reference) {
 }
 
 function loadState() {
-  const defaults = structuredClone(defaultData);
+  const defaults = cloneData(defaultData);
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return defaults;
 
@@ -68,8 +91,8 @@ function loadState() {
     ...defaults,
     ...parsed,
     settings: { ...defaults.settings, ...(parsed.settings || {}) },
-    services: parsed.services?.length ? parsed.services : defaults.services,
-    clients: parsed.clients?.length ? parsed.clients : defaults.clients,
+    services: parsed.services && parsed.services.length ? parsed.services : defaults.services,
+    clients: parsed.clients && parsed.clients.length ? parsed.clients : defaults.clients,
     orders: parsed.orders || defaults.orders,
     cash: parsed.cash || defaults.cash,
     locations: mergeLocations(defaults.locations, parsed.locations),
@@ -80,7 +103,7 @@ function loadState() {
   merged.orders = merged.orders.map((order) => {
     const paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
     const status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
-    const items = order.items?.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0) }];
+    const items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0) }];
     return { ...order, status, paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items };
   });
 
@@ -101,7 +124,7 @@ function formatDateTime(value) {
 }
 
 function normalizeClass(text) {
-  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll(" ", "-");
+  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ /g, "-");
 }
 
 function nextId(list) {
@@ -135,12 +158,12 @@ function orderClient(order) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function availableLocations(currentOrderId = null) {
@@ -215,13 +238,7 @@ function messageForOrder(order, type) {
   const isPaid = order.paymentStatus === "Abonado";
   const unpaidText = type === "ready" ? `Para retirar, el total a pagar es ${money(order.total)}.` : `Queda pendiente de pago ${money(order.total)}.`;
   const paymentText = isPaid ? `Ya figura pago por ${order.paymentMethod || "medio registrado"}.` : unpaidText;
-  return templates[type]
-    .replaceAll("{cliente}", orderClient(order))
-    .replaceAll("{pedido}", order.number || order.location || "")
-    .replaceAll("{fecha}", formatDateTime(new Date().toISOString()))
-    .replaceAll("{estimado}", formatDateTime(order.estimate))
-    .replaceAll("{pago}", paymentText)
-    .replaceAll("{total}", money(order.total));
+  return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", order.number || order.location || ""), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
 }
 
 function render() {
@@ -275,7 +292,7 @@ document.addEventListener("click", (event) => {
     saveSettings: saveSettings,
     resetDemo: resetDemo,
   };
-  handlers[action]?.();
+  if (handlers[action]) handlers[action]();
 });
 
 document.addEventListener("click", (event) => {
@@ -293,8 +310,9 @@ document.addEventListener("change", (event) => {
   }
   if (!event.target.matches("[data-service-select]")) return;
   const selected = event.target.selectedOptions[0];
-  const priceInput = event.target.closest("form")?.querySelector("[name='total']");
-  if (priceInput && selected?.dataset.price) priceInput.value = selected.dataset.price;
+  const form = event.target.closest("form");
+  const priceInput = form ? form.querySelector("[name='total']") : null;
+  if (priceInput && selected && selected.dataset.price) priceInput.value = selected.dataset.price;
 });
 
 function orderDisplayCode(order) {
@@ -315,7 +333,7 @@ function paymentMethodLabel(method) {
 }
 
 function nextFreeLocation() {
-  return availableLocations()[0]?.code || "";
+  return (availableLocations()[0] && availableLocations()[0].code) || "";
 }
 
 let dashboardTab = "Pendiente";
@@ -346,8 +364,8 @@ function clearOrderDate() {
 }
 
 function applyOrderFilters() {
-  const query = document.getElementById("orderSearch")?.value || "";
-  const date = document.getElementById("orderDateFilter")?.value || "";
+  const query = (document.getElementById("orderSearch") && document.getElementById("orderSearch").value) || "";
+  const date = (document.getElementById("orderDateFilter") && document.getElementById("orderDateFilter").value) || "";
   filterOrders(query, date);
 }
 
@@ -418,7 +436,7 @@ function renderSchedule() {
   ];
   const activeCycles = state.orders
     .filter((order) => order.status !== "Retirado")
-    .flatMap((order) => (order.cycles || []).map((cycle) => ({ ...cycle, order })))
+    .reduce((list, order) => list.concat((order.cycles || []).map((cycle) => ({ ...cycle, order }))), [])
     .filter((cycle) => cycle.type !== "Preparación")
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   const weekDays = currentWeekDays(new Date(`${scheduleWeekStart}T00:00:00`));
@@ -463,7 +481,7 @@ function openMachineModal(machineName) {
   selectedMachine = machineName;
   const assigned = state.orders
     .filter((order) => order.status !== "Retirado")
-    .flatMap((order) => (order.cycles || []).map((cycle) => ({ ...cycle, order })))
+    .reduce((list, order) => list.concat((order.cycles || []).map((cycle) => ({ ...cycle, order }))), [])
     .filter((cycle) => cycle.machine === machineName)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   openModal(`Máquina ${escapeHtml(machineName)}`, `
@@ -496,7 +514,7 @@ function openStorageOrder(id) {
 
 function cashReportHtml() {
   const rows = monthlyCashSummary();
-  const latest = rows.at(-1) || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
+  const latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
   return `
     <div class="card report-panel cash-report-section"><div class="toolbar"><div><p class="eyebrow-dark">Reportes de caja</p><h2>Comparación mes a mes</h2></div><span class="status-pill light">Separado de la caja diaria</span></div>
       <div class="grid four report-metrics">
@@ -562,12 +580,12 @@ function openModal(title, html, onSubmit) {
   document.body.appendChild(template);
   const modal = document.querySelector(".modal-backdrop");
   const form = modal.querySelector("form");
-  if (form) form.addEventListener("submit", (event) => { event.preventDefault(); onSubmit?.(new FormData(form)); });
+  if (form) form.addEventListener("submit", (event) => { event.preventDefault(); if (onSubmit) onSubmit(new FormData(form)); });
   return modal;
 }
 
 function closeModal() {
-  document.querySelector(".modal-backdrop")?.remove();
+  const modal = document.querySelector(".modal-backdrop"); if (modal) modal.remove();
 }
 
 function openClientModal(id) {
@@ -589,16 +607,16 @@ function openOrderModal() {
     <label>Pago<select name="paymentStatus"><option>Pendiente</option><option>Abonado</option></select></label>
     <label>Medio de pago<select name="paymentMethod"><option value="Efectivo">💵 Efectivo</option><option value="Transferencia">🏦 Transferencia</option></select></label>
     <div class="full items-builder"><h3>Prendas / trabajos</h3><div data-items-list>
-      ${orderItemRow(firstService?.id || 1, firstService?.price || 0, "")}
+      ${orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, "")}
     </div><button class="secondary" type="button" data-add-item>+ Agregar prenda</button></div>
-    <label>Precio total<input name="total" data-items-total type="number" min="0" value="${firstService?.price || 0}" /></label>
+    <label>Precio total<input name="total" data-items-total type="number" min="0" value="${(firstService && firstService.price) || 0}" /></label>
     <label class="full">Observaciones<textarea name="notes" placeholder="Ej: Frasada polar roja, manchas, preferencias..."></textarea></label>
     <button class="primary full">Crear pedido</button>
   </form>`, (form) => {
     const data = Object.fromEntries(form.entries());
     const createdAt = new Date().toISOString();
     const items = collectItems(form);
-    const primaryService = getService(items[0]?.serviceId || firstService?.id);
+    const primaryService = getService((items[0] && items[0].serviceId) || (firstService && firstService.id));
     const schedule = createOrderSchedule(primaryService, createdAt);
     const orderId = nextId(state.orders);
     const location = data.location || nextFreeLocation();
@@ -618,16 +636,16 @@ function orderItemRow(serviceId, price, name = "") {
 function attachItemBuilder(modal) {
   const list = modal.querySelector("[data-items-list]");
   const recalc = () => {
-    const total = [...modal.querySelectorAll('[name="itemPrice"]')].reduce((sum, input) => sum + Number(input.value || 0), 0);
+    const total = Array.from(modal.querySelectorAll('[name="itemPrice"]')).reduce((sum, input) => sum + Number(input.value || 0), 0);
     modal.querySelector("[data-items-total]").value = total;
   };
   modal.addEventListener("click", (event) => {
     if (event.target.matches("[data-add-item]")) { list.insertAdjacentHTML("beforeend", orderItemRow(state.services[0].id, state.services[0].price)); recalc(); }
-    if (event.target.matches("[data-remove-item]")) { event.target.closest(".item-row")?.remove(); recalc(); }
+    if (event.target.matches("[data-remove-item]")) { { const row = event.target.closest(".item-row"); if (row) row.remove(); } recalc(); }
   });
   modal.addEventListener("change", (event) => {
     if (event.target.matches('[name="itemService"]')) {
-      const price = event.target.selectedOptions[0]?.dataset.price || 0;
+      const price = (event.target.selectedOptions[0] && event.target.selectedOptions[0].dataset.price) || 0;
       event.target.closest(".item-row").querySelector('[name="itemPrice"]').value = price;
       recalc();
     }
@@ -636,7 +654,7 @@ function attachItemBuilder(modal) {
 }
 
 function collectItems(form) {
-  const rows = [...form.querySelectorAll(".item-row")];
+  const rows = Array.from(form.querySelectorAll(".item-row"));
   return rows.map((row) => {
     const serviceId = Number(row.querySelector('[name="itemService"]').value);
     const service = getService(serviceId);
@@ -700,14 +718,14 @@ function openOrderStateModal(id) {
 }
 
 function storageNoticeText(order = null) {
-  const base = state.settings.storageNoticeText.replaceAll("{dias}", state.settings.storageNoticeDays);
+  const base = safeReplaceAll(state.settings.storageNoticeText, "{dias}", state.settings.storageNoticeDays);
   if (!order) return base;
   return `${base}\n\nPedido #${order.number} - Cliente: ${orderClient(order)} - Ubicación: ${order.location || "sin asignar"}.`;
 }
 
 function sendWhatsapp(id, type) {
   const order = getOrder(id);
-  const phone = (getClient(order.clientId)?.phone || "").replace(/\D/g, "");
+  const phone = ((getClient(order.clientId) && getClient(order.clientId).phone) || "").replace(/\D/g, "");
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageForOrder(order, type))}`, "_blank");
 }
 
@@ -740,7 +758,7 @@ function openStorageNoticeModal(id) {
 }
 
 function copyVisibleNotice() {
-  const text = document.querySelector(".notice-text")?.value || "";
+  const text = (document.querySelector(".notice-text") && document.querySelector(".notice-text").value) || "";
   if (navigator.clipboard) navigator.clipboard.writeText(text);
   else prompt("Copiá el cartel", text);
   alert("Cartel copiado/preparado.");
@@ -748,7 +766,7 @@ function copyVisibleNotice() {
 
 function sendStorageNotice(id) {
   const order = getOrder(id);
-  const phone = (getClient(order.clientId)?.phone || "").replace(/\D/g, "");
+  const phone = ((getClient(order.clientId) && getClient(order.clientId).phone) || "").replace(/\D/g, "");
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(storageNoticeText(order))}`, "_blank");
 }
 
@@ -775,7 +793,7 @@ function saveSettings() {
 
 function resetDemo() {
   if (!confirm("¿Reiniciar datos de demostración?")) return;
-  state = structuredClone(defaultData);
+  state = cloneData(defaultData);
   cashUnlocked = false;
   saveState(); render();
 }

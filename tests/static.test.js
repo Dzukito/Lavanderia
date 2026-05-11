@@ -29,6 +29,8 @@ for (const feature of [
   'collectItems',
   'paymentBadge',
   'paymentMethodLabel',
+  'cloneData',
+  'safeReplaceAll',
   'currentWeekDays',
   'setScheduleWeek',
     'openStorageOrder',
@@ -40,6 +42,8 @@ for (const feature of [
 assert.doesNotMatch(app, /oninput=/, 'orders search should use delegated events instead of inline handlers');
 assert.doesNotMatch(app, /onclick=/, 'modals should use delegated actions instead of inline handlers');
 assert.match(app, /paymentStatus/, 'orders should track payment status');
+assert.doesNotMatch(app, /structuredClone/, 'app should avoid structuredClone to support older browsers');
+assert.doesNotMatch(app, /replaceAll/, 'app should avoid String.replaceAll to support older browsers');
 assert.doesNotMatch(app, /Cantidad de valets/, 'new order should use manual items instead of valet quantity');
 assert.match(app, /data-items-list/, 'new order should include manual item rows');
 assert.match(app, /description: `\$\{orderClient\(order\)\} \$\{orderDisplayCode\(order\)\}`/, 'cash payment description should include client and order code');

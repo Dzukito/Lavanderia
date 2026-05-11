@@ -64,12 +64,12 @@
       Secado: machineNames("Secado", settings.dryers),
     };
     const availability = {};
-    Object.values(resources).flat().forEach((name) => {
+    Object.keys(resources).reduce((list, key) => list.concat(resources[key]), []).forEach((name) => {
       availability[name] = new Date(0);
     });
 
     existingOrders
-      .flatMap((order) => order.cycles || [])
+      .reduce((list, order) => list.concat(order.cycles || []), [])
       .sort((a, b) => new Date(a.end) - new Date(b.end))
       .forEach((cycle) => {
         if (availability[cycle.machine] !== undefined) availability[cycle.machine] = new Date(cycle.end);

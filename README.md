@@ -43,6 +43,12 @@ Luego abrir `http://localhost:8080`.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.
 7. Revisar caja con la clave del dueño cada vez que se entra; la caja diaria queda separada de **Caja mensual**.
 
+## Si la pantalla queda en blanco
+
+- Actualizar el navegador de la PC de la lavandería.
+- Abrirlo con el servidor local recomendado: `python3 -m http.server 8080` y entrar a `http://localhost:8080`.
+- Esta versión evita funciones modernas que podían romper navegadores viejos y muestra un mensaje de error visible si algo falla al iniciar.
+
 ## Aviso legal de depósito
 
 El sistema incluye un texto editable para avisar condiciones de guarda de prendas no retiradas. El texto propuesto está redactado como condición comercial informada al cliente y se apoya en el deber de brindar información clara conforme la Ley 24.240 de Defensa del Consumidor. Validar el plazo y la redacción final con asesoría legal/local antes de imprimirlo o enviarlo.
