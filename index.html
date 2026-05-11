@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lavandería Local</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Sistema local</p>
+        <h1>Gestión de Lavandería</h1>
+      </div>
+      <div class="status-pill" id="todayStatus">Lunes a viernes · 09:00 a 19:00</div>
+    </header>
+
+    <main class="app-shell">
+      <nav class="sidebar" aria-label="Secciones del sistema">
+        <button class="nav-button active" data-view="dashboard">Inicio</button>
+        <button class="nav-button" data-view="orders">Pedidos</button>
+        <button class="nav-button" data-view="clients">Clientes</button>
+        <button class="nav-button" data-view="schedule">Turnos</button>
+        <button class="nav-button" data-view="storage">Depósito</button>
+        <button class="nav-button" data-view="cash">Caja 🔒</button>
+        <button class="nav-button" data-view="cashReports">Caja mensual</button>
+        <button class="nav-button" data-view="settings">Config.</button>
+      </nav>
+
+      <section class="content">
+        <section id="dashboard" class="view active"></section>
+        <section id="orders" class="view"></section>
+        <section id="clients" class="view"></section>
+        <section id="schedule" class="view"></section>
+        <section id="storage" class="view"></section>
+        <section id="cash" class="view"></section>
+        <section id="cashReports" class="view"></section>
+        <section id="settings" class="view"></section>
+      </section>
+    </main>
+
+    <template id="modalTemplate">
+      <div class="modal-backdrop" role="dialog" aria-modal="true">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h2></h2>
+            <button class="icon-button" data-close-modal aria-label="Cerrar">×</button>
+          </div>
+          <div class="modal-body"></div>
+        </div>
+      </div>
+    </template>
+
+    <script src="scheduler.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
