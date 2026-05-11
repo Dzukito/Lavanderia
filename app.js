@@ -50,6 +50,42 @@ function safeReplaceAll(value, search, replacement) {
   return String(value).split(search).join(replacement);
 }
 
+function storageGet(key) {
+  try {
+    return window.localStorage ? window.localStorage.getItem(key) : null;
+  } catch (error) {
+    console.warn("No se pudo leer el almacenamiento local. El sistema queda en modo temporal.", error);
+    return null;
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    if (window.localStorage) window.localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn("No se pudo guardar en el almacenamiento local. Revisá permisos del navegador.", error);
+  }
+}
+
+function formDataToObject(form) {
+  const result = {};
+  const data = new FormData(form);
+  if (data.forEach) {
+    data.forEach((value, key) => { result[key] = value; });
+    return result;
+  }
+  Array.from(form.elements).forEach((field) => {
+    if (field.name && !field.disabled) result[field.name] = field.value;
+  });
+  return result;
+}
+
+function formatShortDateTime(date) {
+  const value = new Date(date);
+  if (isNaN(value.getTime())) return "Sin estimar";
+  return `${String(value.getDate()).padStart(2, "0")}/${String(value.getMonth() + 1).padStart(2, "0")}/${String(value.getFullYear()).slice(-2)} ${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+}
+
 function flatten(list) {
   return Array.prototype.concat.apply([], list);
 }
@@ -76,7 +112,7 @@ function currentWeekStart(reference) {
 
 function loadState() {
   const defaults = cloneData(defaultData);
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = storageGet(STORAGE_KEY);
   if (!saved) return defaults;
 
   let parsed;
@@ -111,7 +147,7 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  storageSet(STORAGE_KEY, JSON.stringify(state));
 }
 
 function money(value) {
@@ -120,7 +156,7 @@ function money(value) {
 
 function formatDateTime(value) {
   if (!value) return "Sin estimar";
-  return new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return formatShortDateTime(value);
 }
 
 function normalizeClass(text) {
@@ -214,7 +250,7 @@ function monthlyCashSummary() {
   const summary = {};
   state.cash.forEach((entry) => {
     const key = monthKey(entry.date);
-    summary[key] ||= { income: 0, expense: 0, cash: 0, transfer: 0 };
+    if (!summary[key]) summary[key] = { income: 0, expense: 0, cash: 0, transfer: 0 };
     const amount = Number(entry.amount || 0);
     if (entry.type === "Ingreso") summary[key].income += amount;
     if (entry.type === "Egreso") summary[key].expense += amount;
@@ -394,7 +430,7 @@ function renderOrders() {
 window.filterOrders = (query, date = "") => {
   const q = query.toLowerCase();
   const filtered = state.orders.filter((order) => {
-    const matchesQuery = `${order.number} ${order.location || ""} ${orderClient(order)} ${getClient(order.clientId)?.phone || ""} ${order.status} ${order.notes || ""}`.toLowerCase().includes(q);
+    const matchesQuery = `${order.number} ${order.location || ""} ${orderClient(order)} ${(getClient(order.clientId) && getClient(order.clientId).phone) || ""} ${order.status} ${order.notes || ""}`.toLowerCase().includes(q);
     const matchesDate = !date || dateKey(order.createdAt) === date;
     return matchesQuery && matchesDate;
   });
@@ -591,7 +627,7 @@ function closeModal() {
 function openClientModal(id) {
   const client = id ? getClient(id) : { name: "", phone: "", address: "", notes: "", authorizedPickups: "" };
   openModal(id ? "Editar cliente" : "Nuevo cliente", `<form class="form-grid"><label>Nombre<input name="name" required value="${escapeHtml(client.name)}" /></label><label>Teléfono WhatsApp<input name="phone" required value="${escapeHtml(client.phone)}" /></label><label>Dirección<input name="address" value="${escapeHtml(client.address || "")}" /></label><label>Autorizados a retirar<input name="authorizedPickups" placeholder="Ej: hijo Juan DNI..." value="${escapeHtml(client.authorizedPickups || "")}" /></label><label class="full">Notas<input name="notes" value="${escapeHtml(client.notes || "")}" /></label><button class="primary full">Guardar cliente</button></form>`, (form) => {
-    const data = Object.fromEntries(form.entries());
+    const data = formDataToObject(form);
     if (id) Object.assign(client, data); else state.clients.push({ id: nextId(state.clients), ...data });
     saveState(); closeModal(); render();
   });
@@ -613,7 +649,7 @@ function openOrderModal() {
     <label class="full">Observaciones<textarea name="notes" placeholder="Ej: Frasada polar roja, manchas, preferencias..."></textarea></label>
     <button class="primary full">Crear pedido</button>
   </form>`, (form) => {
-    const data = Object.fromEntries(form.entries());
+    const data = formDataToObject(form);
     const createdAt = new Date().toISOString();
     const items = collectItems(form);
     const primaryService = getService((items[0] && items[0].serviceId) || (firstService && firstService.id));
@@ -690,7 +726,7 @@ function openOrderEditModal(id) {
     <label class="full">Observaciones<textarea name="notes">${escapeHtml(order.notes || "")}</textarea></label>
     <button class="primary full">Guardar cambios</button>
   </form>`, (form) => {
-    const data = Object.fromEntries(form.entries());
+    const data = formDataToObject(form);
     order.location = data.location;
     order.number = orderDisplayCode(order);
     order.paymentStatus = data.paymentStatus;
@@ -710,7 +746,7 @@ function openOrderStateModal(id) {
     ${STATES.map((status) => `<label class="state-option ${status === order.status ? "selected" : ""}"><input type="radio" name="status" value="${status}" ${status === order.status ? "checked" : ""} /> <span>${status}</span></label>`).join("")}
     <button class="primary full">Guardar estado</button>
   </form>`, (form) => {
-    const data = Object.fromEntries(form.entries());
+    const data = formDataToObject(form);
     order.status = data.status;
     if (order.status === "Retirado") order.location = "";
     saveState(); closeModal(); render();
@@ -779,7 +815,7 @@ function unlockCash() {
 function openCashModal(type) {
   const categories = type === "Ingreso" ? ["Pedido", "Seña", "Otro"] : ["Agua", "Luz", "Gas", "Insumos", "Alquiler", "Otros servicios"];
   openModal(`${type} de caja`, `<form class="form-grid"><label>Categoría<select name="category">${categories.map((category) => `<option>${escapeHtml(category)}</option>`).join("")}</select></label><label>Medio<select name="method"><option value="Efectivo">💵 Efectivo</option><option value="Transferencia">🏦 Transferencia</option></select></label><label>Importe<input name="amount" type="number" min="0" required /></label><label>Descripción<input name="description" required /></label><button class="primary full">Guardar ${type.toLowerCase()}</button></form>`, (form) => {
-    state.cash.push({ id: nextId(state.cash), type, date: new Date().toISOString(), ...Object.fromEntries(form.entries()) });
+    state.cash.push({ id: nextId(state.cash), type, date: new Date().toISOString(), ...formDataToObject(form) });
     saveState(); closeModal(); render();
   });
 }

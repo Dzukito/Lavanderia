@@ -44,6 +44,11 @@ assert.doesNotMatch(app, /onclick=/, 'modals should use delegated actions instea
 assert.match(app, /paymentStatus/, 'orders should track payment status');
 assert.doesNotMatch(app, /structuredClone/, 'app should avoid structuredClone to support older browsers');
 assert.doesNotMatch(app, /replaceAll/, 'app should avoid String.replaceAll to support older browsers');
+assert.doesNotMatch(app, /\?\./, 'app should avoid optional chaining to support older browsers');
+assert.doesNotMatch(app, /\|\|=/, 'app should avoid logical assignment to support older browsers');
+assert.doesNotMatch(app, /Object\.fromEntries/, 'app should avoid Object.fromEntries to support older browsers');
+assert.doesNotMatch(app, /dateStyle|timeStyle/, 'app should avoid newer Intl dateStyle/timeStyle options');
+assert.doesNotMatch(app, /Number\.isNaN/, 'app should avoid Number.isNaN to support older browsers');
 assert.doesNotMatch(app, /Cantidad de valets/, 'new order should use manual items instead of valet quantity');
 assert.match(app, /data-items-list/, 'new order should include manual item rows');
 assert.match(app, /description: `\$\{orderClient\(order\)\} \$\{orderDisplayCode\(order\)\}`/, 'cash payment description should include client and order code');
