@@ -1,837 +1,728 @@
-window.addEventListener("error", (event) => {
-  const root = document.querySelector(".content");
-  if (!root) return;
-  root.innerHTML = `<section class="view active"><div class="card"><h2>No se pudo iniciar el sistema</h2><p>Probá actualizar el navegador o abrir el sistema con <code>python3 -m http.server 8080</code>.</p><p><strong>Detalle:</strong> ${event.message}</p></div></section>`;
-});
-
-const STORAGE_KEY = "lavanderia-local-v1";
-const STATES = ["Pendiente", "Listo", "Retirado"];
-const defaultData = {
-  settings: {
-    openHour: "09:00",
-    closeHour: "19:00",
-    washingMinutes: 30,
-    dryingMinutes: 50,
-    smallWashers: 4,
-    dryers: 6,
-    whatsappReceivedMessage: "Hola {cliente}. Recibimos tu pedido {pedido}. {pago}. Te avisamos cuando esté listo. Gracias.",
-    whatsappMessage: "Hola {cliente}. Tu pedido {pedido} ya está listo para retirar. {pago}. Te esperamos.",
-    whatsappRetiredMessage: "Hola {cliente}. Dejamos constancia de que retiró su pedido {pedido} el {fecha}. {pago}. Muchas gracias.",
-    storageNoticeDays: 30,
-    storageNoticeText: "Condiciones de guarda: conforme las condiciones informadas al momento de recepción y el deber de información clara previsto por la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días corridos desde el aviso de disponibilidad podrán generar cargos de guarda y/o ser derivados a donación previa comunicación fehaciente al cliente. Texto sujeto a validación legal local.",
-    cashPin: "1234",
-  },
-  services: [
-    { id: 1, name: "Valet", price: 3500, wash: true, dry: true },
-    { id: 2, name: "Lavado", price: 1800, wash: true, dry: false },
-    { id: 3, name: "Secado", price: 1600, wash: false, dry: true },
-    { id: 4, name: "Lavado + secado", price: 3000, wash: true, dry: true },
-    { id: 5, name: "Otro", price: 0, wash: false, dry: false },
-  ],
-  clients: [
-    { id: 1, name: "María Gómez", phone: "5491112345678", address: "", notes: "Prefiere WhatsApp", authorizedPickups: "Hijo: Lucas Gómez" },
-    { id: 2, name: "Juan Pérez", phone: "5491198765432", address: "", notes: "", authorizedPickups: "" },
-  ],
-  orders: [],
-  cash: [],
-  locations: flatten(["A", "B", "C", "D", "E", "F"].map((row) => Array.from({ length: 6 }, (_, index) => `${row}${index + 1}`))).map((code, index) => ({ id: index + 1, code })),
+"use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
 };
-
-function cloneData(value) {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch (error) {
-    console.warn("No se pudo clonar la información inicial", error);
-    return value;
-  }
-}
-
-function safeReplaceAll(value, search, replacement) {
-  return String(value).split(search).join(replacement);
-}
-
-function storageGet(key) {
-  try {
-    return window.localStorage ? window.localStorage.getItem(key) : null;
-  } catch (error) {
-    console.warn("No se pudo leer el almacenamiento local. El sistema queda en modo temporal.", error);
-    return null;
-  }
-}
-
-function storageSet(key, value) {
-  try {
-    if (window.localStorage) window.localStorage.setItem(key, value);
-  } catch (error) {
-    console.warn("No se pudo guardar en el almacenamiento local. Revisá permisos del navegador.", error);
-  }
-}
-
-function formDataToObject(form) {
-  const result = {};
-  const data = new FormData(form);
-  if (data.forEach) {
-    data.forEach((value, key) => { result[key] = value; });
-    return result;
-  }
-  Array.from(form.elements).forEach((field) => {
-    if (field.name && !field.disabled) result[field.name] = field.value;
-  });
-  return result;
-}
-
-function formatShortDateTime(date) {
-  const value = new Date(date);
-  if (isNaN(value.getTime())) return "Sin estimar";
-  return `${String(value.getDate()).padStart(2, "0")}/${String(value.getMonth() + 1).padStart(2, "0")}/${String(value.getFullYear()).slice(-2)} ${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
-}
-
-function flatten(list) {
-  return Array.prototype.concat.apply([], list);
-}
-
-let state = loadState();
-let currentView = "dashboard";
-let cashUnlocked = false;
-let selectedMachine = null;
-let scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
-let schedulePreview = null;
-
-function mergeLocations(defaultLocations, savedLocations = []) {
-  const byCode = new Map([...defaultLocations, ...(savedLocations || [])].map((location, index) => [location.code, { id: index + 1, code: location.code }]));
-  return [...byCode.values()].map((location, index) => ({ ...location, id: index + 1 }));
-}
-
-function currentWeekStart(reference) {
-  const day = reference.getDay() || 7;
-  const monday = new Date(reference);
-  monday.setDate(reference.getDate() - day + 1);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
-function loadState() {
-  const defaults = cloneData(defaultData);
-  const saved = storageGet(STORAGE_KEY);
-  if (!saved) return defaults;
-
-  let parsed;
-  try {
-    parsed = JSON.parse(saved);
-  } catch (error) {
-    console.warn("No se pudieron leer los datos guardados. Se cargan datos iniciales.", error);
-    return defaults;
-  }
-
-  const merged = {
-    ...defaults,
-    ...parsed,
-    settings: { ...defaults.settings, ...(parsed.settings || {}) },
-    services: parsed.services && parsed.services.length ? parsed.services : defaults.services,
-    clients: parsed.clients && parsed.clients.length ? parsed.clients : defaults.clients,
-    orders: parsed.orders || defaults.orders,
-    cash: parsed.cash || defaults.cash,
-    locations: mergeLocations(defaults.locations, parsed.locations),
-  };
-
-  merged.clients = merged.clients.map((client) => ({ authorizedPickups: "", ...client }));
-
-  merged.orders = merged.orders.map((order) => {
-    const paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
-    const status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
-    const items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0) }];
-    return { ...order, status, paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items };
-  });
-
-  return merged;
-}
-
-function saveState() {
-  storageSet(STORAGE_KEY, JSON.stringify(state));
-}
-
-function money(value) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(Number(value || 0));
-}
-
-function formatDateTime(value) {
-  if (!value) return "Sin estimar";
-  return formatShortDateTime(value);
-}
-
-function normalizeClass(text) {
-  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ /g, "-");
-}
-
-function nextId(list) {
-  return list.length ? Math.max(...list.map((item) => item.id)) + 1 : 1;
-}
-
-function nextOrderNumber() {
-  return String(1000 + nextId(state.orders)).padStart(4, "0");
-}
-
-function getClient(id) {
-  return state.clients.find((client) => client.id === Number(id));
-}
-
-function getService(id) {
-  return state.services.find((service) => service.id === Number(id));
-}
-
-function getOrder(id) {
-  return state.orders.find((order) => order.id === Number(id));
-}
-
-function serviceSummary(order) {
-  const service = getService(order.serviceId);
-  return service ? service.name : "Servicio eliminado";
-}
-
-function orderClient(order) {
-  const client = getClient(order.clientId);
-  return client ? client.name : "Cliente eliminado";
-}
-
-function escapeHtml(value) {
-  return String(value == null ? "" : value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function availableLocations(currentOrderId = null) {
-  const busy = new Set(
-    state.orders
-      .filter((order) => order.id !== Number(currentOrderId) && order.location && order.status !== "Retirado")
-      .map((order) => order.location),
-  );
-  return state.locations.filter((location) => !busy.has(location.code));
-}
-
-function createOrderSchedule(service, createdAt) {
-  return LaundryScheduler.scheduleOrder(state.orders, service, state.settings, createdAt);
-}
-
-function currentWeekDays(reference = new Date()) {
-  const monday = currentWeekStart(reference);
-  return Array.from({ length: 5 }, (_, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return date;
-  });
-}
-
-function dateKey(date) {
-  return new Date(date).toISOString().slice(0, 10);
-}
-
-function hourLabel(hour) {
-  return `${String(hour).padStart(2, "0")}:00`;
-}
-
-function cycleOverlapsHour(cycle, day, hour) {
-  const start = new Date(cycle.start);
-  const end = new Date(cycle.end);
-  const blockStart = new Date(day);
-  blockStart.setHours(hour, 0, 0, 0);
-  const blockEnd = new Date(blockStart);
-  blockEnd.setHours(hour + 1, 0, 0, 0);
-  return start < blockEnd && end > blockStart;
-}
-
-function monthKey(value) {
-  return new Date(value).toISOString().slice(0, 7);
-}
-
-function monthlyCashSummary() {
-  const summary = {};
-  state.cash.forEach((entry) => {
-    const key = monthKey(entry.date);
-    if (!summary[key]) summary[key] = { income: 0, expense: 0, cash: 0, transfer: 0 };
-    const amount = Number(entry.amount || 0);
-    if (entry.type === "Ingreso") summary[key].income += amount;
-    if (entry.type === "Egreso") summary[key].expense += amount;
-    if (entry.method === "Efectivo") summary[key].cash += entry.type === "Ingreso" ? amount : -amount;
-    if (entry.method === "Transferencia") summary[key].transfer += entry.type === "Ingreso" ? amount : -amount;
-  });
-  return Object.entries(summary).sort().map(([month, values], index, list) => {
-    const balance = values.income - values.expense;
-    const prevBalance = index > 0 ? list[index - 1][1].income - list[index - 1][1].expense : null;
-    const diff = prevBalance ? Math.round(((balance - prevBalance) / Math.abs(prevBalance)) * 100) : null;
-    return { month, ...values, balance, diff };
-  });
-}
-
-function messageForOrder(order, type) {
-  const templates = {
-    received: state.settings.whatsappReceivedMessage,
-    ready: state.settings.whatsappMessage,
-    retired: state.settings.whatsappRetiredMessage,
-  };
-  const isPaid = order.paymentStatus === "Abonado";
-  const unpaidText = type === "ready" ? `Para retirar, el total a pagar es ${money(order.total)}.` : `Queda pendiente de pago ${money(order.total)}.`;
-  const paymentText = isPaid ? `Ya figura pago por ${order.paymentMethod || "medio registrado"}.` : unpaidText;
-  return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", order.number || order.location || ""), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
-}
-
-function render() {
-  document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === currentView));
-  document.querySelectorAll(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.view === currentView));
-  renderDashboard();
-  renderOrders();
-  renderClients();
-  renderSchedule();
-  renderStorage();
-  renderCash();
-  renderCashReports();
-  renderSettings();
-}
-
-function setView(view) {
-  if (view === "cash") cashUnlocked = false;
-  currentView = view;
-  render();
-}
-
-document.querySelectorAll(".nav-button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
-
-document.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action]");
-  if (!target) return;
-  const action = target.dataset.action;
-  const id = target.dataset.id;
-  const handlers = {
-    newOrder: openOrderModal,
-    newClient: openClientModal,
-    editClient: () => openClientModal(id),
-    editOrderStatus: () => openOrderEditModal(id),
-    orderState: () => openOrderStateModal(id),
-    dashboardTab: () => setDashboardTab(target.dataset.tab),
-    clearOrderDate: clearOrderDate,
-    whatsapp: () => openWhatsappMenu(id),
-    storageNotice: () => openStorageNoticeModal(id),
-    openStorageOrder: () => openStorageOrder(id),
-    prevWeek: () => moveScheduleWeek(-7),
-    nextWeek: () => moveScheduleWeek(7),
-    todayWeek: () => setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)),
-
-    sendWhatsapp: () => sendWhatsapp(id, target.dataset.messageType),
-    copyNotice: copyVisibleNotice,
-    sendStorageNotice: () => sendStorageNotice(id),
-    machineEdit: () => openMachineModal(target.dataset.machine),
-    cashIncome: () => openCashModal("Ingreso"),
-    cashExpense: () => openCashModal("Egreso"),
-    unlockCash: unlockCash,
-    saveSettings: saveSettings,
-    resetDemo: resetDemo,
-  };
-  if (handlers[action]) handlers[action]();
-});
-
-document.addEventListener("click", (event) => {
-  if (event.target.matches("[data-close-modal]")) closeModal();
-});
-
-document.addEventListener("input", (event) => {
-  if (event.target.matches("[data-search-orders], [data-order-date]")) applyOrderFilters();
-});
-
-document.addEventListener("change", (event) => {
-  if (event.target.matches("[data-schedule-week]")) {
-    setScheduleWeek(event.target.value);
-    return;
-  }
-  if (!event.target.matches("[data-service-select]")) return;
-  const selected = event.target.selectedOptions[0];
-  const form = event.target.closest("form");
-  const priceInput = form ? form.querySelector("[name='total']") : null;
-  if (priceInput && selected && selected.dataset.price) priceInput.value = selected.dataset.price;
-});
-
-function orderDisplayCode(order) {
-  return order.location ? `${order.location}-#${String(order.id).padStart(4, "0")}` : `Sin depósito-#${String(order.id).padStart(4, "0")}`;
-}
-
-function itemSummary(order) {
-  return (order.items || []).map((item) => `${item.name} (${money(item.price)})`).join(" · ") || serviceSummary(order);
-}
-
-function paymentBadge(order) {
-  const status = order.paymentStatus || "Pendiente";
-  return `<span class="payment-badge ${status === "Abonado" ? "paid" : "due"}">${status === "Abonado" ? "✅ Abonado" : "🟠 Pendiente"}</span>`;
-}
-
-function paymentMethodLabel(method) {
-  return method === "Transferencia" ? "🏦 Transferencia" : "💵 Efectivo";
-}
-
-function nextFreeLocation() {
-  return (availableLocations()[0] && availableLocations()[0].code) || "";
-}
-
-let dashboardTab = "Pendiente";
-
-function orderGroup(order) {
-  if (order.status === "Retirado") return "Retirado";
-  if (order.status === "Listo") return "Listo";
-  return "Pendiente";
-}
-
-function ordersByGroup(group) {
-  return state.orders.filter((order) => orderGroup(order) === group).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-}
-
-function setDashboardTab(tab) {
-  dashboardTab = tab;
-  renderDashboard();
-}
-
-function localDateInput(date = new Date()) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
-
-function clearOrderDate() {
-  const input = document.getElementById("orderDateFilter");
-  if (input) input.value = "";
-  applyOrderFilters();
-}
-
-function applyOrderFilters() {
-  const query = (document.getElementById("orderSearch") && document.getElementById("orderSearch").value) || "";
-  const date = (document.getElementById("orderDateFilter") && document.getElementById("orderDateFilter").value) || "";
-  filterOrders(query, date);
-}
-
-function renderDashboard() {
-  const groups = ["Pendiente", "Listo", "Retirado"];
-  const selectedOrders = ordersByGroup(dashboardTab);
-  document.getElementById("dashboard").innerHTML = `
-    <div class="simple-home">
-      <div class="home-actions"><button class="primary big-action" data-action="newOrder">+ Nuevo pedido</button><button class="secondary big-action" data-action="newClient">+ Nuevo cliente</button></div>
-      <div class="tabs">${groups.map((group) => `<button class="tab-button ${dashboardTab === group ? "active" : ""}" data-action="dashboardTab" data-tab="${group}">${group}<strong>${ordersByGroup(group).length}</strong></button>`).join("")}</div>
-      ${orderCards(selectedOrders, `Pedidos ${dashboardTab.toLowerCase()}s`, true)}
-    </div>`;
-}
-
-function renderOrders() {
-  const today = localDateInput();
-  document.getElementById("orders").innerHTML = `
-    <div class="card section-card">
-      <div class="toolbar"><div><p class="eyebrow-dark">Operación</p><h2>Pedidos</h2></div><button class="primary" data-action="newOrder">+ Nuevo pedido</button></div>
-      <div class="filters-row"><input id="orderSearch" data-search-orders placeholder="Buscar por depósito, cliente, teléfono, estado u observaciones" /><label>Fecha<input id="orderDateFilter" data-order-date type="date" value="${today}" /></label><button class="secondary" data-action="clearOrderDate">Ver todos</button></div>
-    </div>
-    <div id="ordersTable">${orderCards(state.orders.filter((order) => dateKey(order.createdAt) === today).reverse(), "Pedidos del día", false)}</div>
-  `;
-}
-
-window.filterOrders = (query, date = "") => {
-  const q = query.toLowerCase();
-  const filtered = state.orders.filter((order) => {
-    const matchesQuery = `${order.number} ${order.location || ""} ${orderClient(order)} ${(getClient(order.clientId) && getClient(order.clientId).phone) || ""} ${order.status} ${order.notes || ""}`.toLowerCase().includes(q);
-    const matchesDate = !date || dateKey(order.createdAt) === date;
-    return matchesQuery && matchesDate;
-  });
-  document.getElementById("ordersTable").innerHTML = orderCards(filtered.reverse(), date ? "Pedidos filtrados" : "Todos los pedidos", false);
-};
-
-function orderCards(orders, title, compact = false) {
-  return `
-    <div class="card orders-panel">
-      <h2>${escapeHtml(title)}</h2>
-      <div class="order-card-list">${orders.map((order) => `
-        <article class="order-card ${normalizeClass(orderGroup(order))}">
-          <div class="order-main"><strong class="order-code">${escapeHtml(orderDisplayCode(order))}</strong><span class="badge ${normalizeClass(orderGroup(order))}">${escapeHtml(orderGroup(order))}</span></div>
-          <div><strong>${escapeHtml(orderClient(order))}</strong><br><small>${escapeHtml(itemSummary(order))} · ${formatDateTime(order.estimate)}</small></div>
-          <p class="order-notes">${escapeHtml(order.notes || "Sin observaciones")}</p>
-          <div class="order-meta"><span>Pago: ${paymentBadge(order)} ${paymentMethodLabel(order.paymentMethod)}</span><span>Total: ${money(order.total)}</span></div>
-          <div class="actions"><button class="secondary" data-action="orderState" data-id="${order.id}">Estado</button><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button></div>
-        </article>`).join("") || `<p>No hay pedidos para mostrar.</p>`}</div>
-    </div>`;
-}
-
-function ordersTable(orders, title) {
-  return orderCards(orders, title, false);
-}
-
-function renderClients() {
-  document.getElementById("clients").innerHTML = `
-    <div class="card section-card">
-      <div class="toolbar"><div><p class="eyebrow-dark">Personas</p><h2>Clientes</h2></div><button class="primary" data-action="newClient">+ Nuevo cliente</button></div>
-      <div class="client-card-grid">${state.clients.map((client) => `<article class="client-card"><div class="client-avatar">👤</div><h3>${escapeHtml(client.name)}</h3><p><strong>Tel:</strong> ${escapeHtml(client.phone)}</p><p><strong>Retira:</strong> ${escapeHtml(client.authorizedPickups || "Solo titular")}</p><p><strong>Notas:</strong> ${escapeHtml(client.notes || "-")}</p><button class="secondary" data-action="editClient" data-id="${client.id}">Editar cliente</button></article>`).join("")}</div>
-    </div>`;
-}
-
-
-function renderSchedule() {
-  const machines = [
-    ...LaundryScheduler.machineNames("Lavado", state.settings.smallWashers).map((name) => ({ type: "Lavado", name })),
-    ...LaundryScheduler.machineNames("Secado", state.settings.dryers).map((name) => ({ type: "Secado", name })),
-  ];
-  const activeCycles = state.orders
-    .filter((order) => order.status !== "Retirado")
-    .reduce((list, order) => list.concat((order.cycles || []).map((cycle) => ({ ...cycle, order }))), [])
-    .filter((cycle) => cycle.type !== "Preparación")
-    .sort((a, b) => new Date(a.start) - new Date(b.start));
-  const weekDays = currentWeekDays(new Date(`${scheduleWeekStart}T00:00:00`));
-  const openHour = Number(state.settings.openHour.split(":")[0]);
-  const closeHour = Number(state.settings.closeHour.split(":")[0]);
-  const hours = Array.from({ length: Math.max(1, closeHour - openHour) }, (_, index) => openHour + index);
-  const washDryMinutes = Number(state.settings.washingMinutes) + Number(state.settings.dryingMinutes);
-  const preview = "";
-
-  document.getElementById("schedule").innerHTML = `
-    <div class="card hero-card"><div><p class="eyebrow-dark">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>${weekDays[0].toLocaleDateString("es-AR")}</strong>. Un valet lavado + secado ocupa aprox. <strong>${washDryMinutes} minutos</strong>, pero la estimación real depende de máquinas libres.</p></div><div class="status-pill light">${state.settings.smallWashers} lavarropas · ${state.settings.dryers} secadoras</div></div>
-    <div class="card schedule-controls"><button class="secondary" data-action="prevWeek">←</button><label>Semana<input class="week-input" type="date" data-schedule-week value="${scheduleWeekStart}" /></label><button class="secondary" data-action="todayWeek">Hoy</button><button class="secondary" data-action="nextWeek">→</button>${preview}</div>
-    <div class="card schedule-card"><h3>Semana seleccionada</h3><div class="timeline-grid" style="--days:${weekDays.length}">
-      <div class="timeline-head">Hora</div>${weekDays.map((day) => `<div class="timeline-head">${day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" })}</div>`).join("")}
-      ${hours.map((hour) => `<div class="timeline-hour">${hourLabel(hour)}</div>${weekDays.map((day) => {
-        const cycles = activeCycles.filter((cycle) => cycleOverlapsHour(cycle, day, hour));
-        return `<div class="timeline-cell">${cycles.map((cycle) => `<div class="timeline-event ${cycle.type === "Lavado" ? "wash" : "dry"}"><strong>${escapeHtml(orderClient(cycle.order))}</strong><span>${escapeHtml(cycle.type)} · ${escapeHtml(cycle.machine)}</span><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<span class="free-text">Libre</span>`}</div>`;
-      }).join("")}`).join("")}
-    </div></div>
-    <div class="card"><h3 class="machine-section-title">Lavarropas</h3>${machineBoard(machines.filter((machine) => machine.type === "Lavado"), activeCycles)}<h3 class="machine-section-title">Secadoras</h3>${machineBoard(machines.filter((machine) => machine.type === "Secado"), activeCycles)}</div>`;
-}
-
-function setScheduleWeek(value) {
-  scheduleWeekStart = currentWeekStart(new Date(`${value}T00:00:00`)).toISOString().slice(0, 10);
-  renderSchedule();
-}
-
-function moveScheduleWeek(days) {
-  const next = new Date(`${scheduleWeekStart}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  setScheduleWeek(next.toISOString().slice(0, 10));
-}
-
-function machineBoard(machines, activeCycles) {
-  return `<div class="machine-board">${machines.map((machine) => {
-    const assigned = activeCycles.filter((cycle) => cycle.machine === machine.name).slice(0, 8);
-    return `<button class="machine machine-click type-${normalizeClass(machine.type)} ${assigned.length ? "occupied" : "free-machine"}" data-action="machineEdit" data-machine="${escapeHtml(machine.name)}"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${assigned.length ? "blocked" : "free-machine-badge"}">${assigned.length ? "Ocupada" : "Libre"}</span>${assigned.map((cycle) => `<div class="slot"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong><br><span>${escapeHtml(orderClient(cycle.order))}</span></div>`).join("") || `<div class="slot">Disponible</div>`}</button>`;
-  }).join("")}</div>`;
-}
-
-function openMachineModal(machineName) {
-  selectedMachine = machineName;
-  const assigned = state.orders
-    .filter((order) => order.status !== "Retirado")
-    .reduce((list, order) => list.concat((order.cycles || []).map((cycle) => ({ ...cycle, order }))), [])
-    .filter((cycle) => cycle.machine === machineName)
-    .sort((a, b) => new Date(a.start) - new Date(b.start));
-  openModal(`Máquina ${escapeHtml(machineName)}`, `
-    <div class="machine-modal-list">${assigned.map((cycle) => `<button class="slot machine-slot" data-action="openStorageOrder" data-id="${cycle.order.id}"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong>${escapeHtml(orderClient(cycle.order))}<small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></button>`).join("") || `<p>Máquina libre. No hay pedidos asignados.</p>`}</div>`);
-}
-
-function renderStorage() {
-  const occupied = new Map(state.orders.filter((order) => order.location && order.status !== "Retirado").map((order) => [order.location, order]));
-  document.getElementById("storage").innerHTML = `
-    <div class="card hero-card"><div><p class="eyebrow-dark">Depósito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hacé clic en una ubicación ocupada para abrir el pedido correspondiente.</p></div><button class="secondary" data-action="storageNotice">Ver aviso general</button></div>
-    <div class="storage-grid">${state.locations.map((location) => {
-      const order = occupied.get(location.code);
-      return order
-        ? `<button class="location busy location-button" data-action="openStorageOrder" data-id="${order.id}"><h3>${escapeHtml(location.code)}</h3><strong>#${escapeHtml(order.number)}</strong><span>${escapeHtml(orderClient(order))}</span><small>${escapeHtml(order.status)}</small></button>`
-        : `<article class="location free"><h3>${escapeHtml(location.code)}</h3>Libre</article>`;
-    }).join("")}</div>`;
-}
-
-function openStorageOrder(id) {
-  setView("orders");
-  const input = document.getElementById("orderSearch");
-  const order = getOrder(id);
-  if (input && order) {
-    input.value = order.number;
-    filterOrders(order.number);
-  }
-  openOrderEditModal(id);
-}
-
-
-function cashReportHtml() {
-  const rows = monthlyCashSummary();
-  const latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
-  return `
-    <div class="card report-panel cash-report-section"><div class="toolbar"><div><p class="eyebrow-dark">Reportes de caja</p><h2>Comparación mes a mes</h2></div><span class="status-pill light">Separado de la caja diaria</span></div>
-      <div class="grid four report-metrics">
-        <article class="mini-metric"><span>Ingresos mes</span><strong>${money(latest.income)}</strong></article>
-        <article class="mini-metric"><span>Egresos mes</span><strong>${money(latest.expense)}</strong></article>
-        <article class="mini-metric"><span>Saldo mes</span><strong>${money(latest.balance)}</strong></article>
-        <article class="mini-metric"><span>Vs anterior</span><strong>${latest.diff === null ? "-" : `${latest.diff}%`}</strong></article>
-      </div>
-      <div class="bar-list">${rows.map((row) => {
-        const max = Math.max(row.income, row.expense, 1);
-        return `<div class="bar-row"><div><strong>${row.month}</strong><small>Saldo ${money(row.balance)} · Efectivo ${money(row.cash)} · Transf. ${money(row.transfer)}</small></div><div class="bars"><span class="bar income" style="width:${Math.max(4, (row.income / max) * 100)}%"></span><span class="bar expense" style="width:${Math.max(4, (row.expense / max) * 100)}%"></span></div></div>`;
-      }).join("") || `<p>Cargá movimientos para ver la comparación mensual.</p>`}</div>
-      <div class="table-wrap"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs mes anterior</th><th>Efectivo</th><th>Transferencia</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.month}</td><td>${money(row.income)}</td><td>${money(row.expense)}</td><td>${money(row.balance)}</td><td>${row.diff === null ? "-" : `${row.diff}%`}</td><td>${money(row.cash)}</td><td>${money(row.transfer)}</td></tr>`).join("") || `<tr><td colspan="7">Sin movimientos de caja.</td></tr>`}</tbody></table></div>
-    </div>`;
-}
-
-function renderCash() {
-  if (!cashUnlocked) {
-    document.getElementById("cash").innerHTML = `<div class="card"><h2>Caja protegida</h2><p>Ingresá la clave del dueño para ver ingresos, egresos y saldos.</p><div class="form-grid"><label>Clave<input id="cashPin" type="password" placeholder="Clave" /></label></div><br><button class="primary" data-action="unlockCash">Entrar</button><p><small>La clave inicial es 1234 y puede cambiarse desde Configuración.</small></p></div>`;
-    return;
-  }
-  const income = state.cash.filter((entry) => entry.type === "Ingreso").reduce((sum, entry) => sum + Number(entry.amount), 0);
-  const expense = state.cash.filter((entry) => entry.type === "Egreso").reduce((sum, entry) => sum + Number(entry.amount), 0);
-  const cash = state.cash.filter((entry) => entry.method === "Efectivo").reduce((sum, entry) => sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)), 0);
-  const transfer = state.cash.filter((entry) => entry.method === "Transferencia").reduce((sum, entry) => sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)), 0);
-  document.getElementById("cash").innerHTML = `
-    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>${money(income)}</strong></article><article class="card metric"><span>Egresos</span><strong>${money(expense)}</strong></article><article class="card metric"><span>Efectivo</span><strong>${money(cash)}</strong></article><article class="card metric"><span>Transferencia</span><strong>${money(transfer)}</strong></article></div>
-    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>`;
-}
-
-function cashTable() {
-  return `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>${[...state.cash].reverse().map((entry) => `<tr><td>${formatDateTime(entry.date)}</td><td>${escapeHtml(entry.type)}</td><td>${escapeHtml(entry.category)}</td><td>${escapeHtml(entry.description)}</td><td>${paymentMethodLabel(entry.method)}</td><td>${money(entry.amount)}</td></tr>`).join("") || `<tr><td colspan="6">Sin movimientos.</td></tr>`}</tbody></table></div>`;
-}
-
-function renderCashReports() {
-  document.getElementById("cashReports").innerHTML = cashReportHtml();
-}
-
-
-function renderSettings() {
-  document.getElementById("settings").innerHTML = `
-    <div class="card"><h2>Configuración</h2><div class="form-grid">
-      <label>Apertura<input id="openHour" type="time" value="${escapeHtml(state.settings.openHour)}" /></label>
-      <label>Cierre<input id="closeHour" type="time" value="${escapeHtml(state.settings.closeHour)}" /></label>
-      <label>Lavarropas chicos<input id="smallWashers" type="number" min="1" value="${Number(state.settings.smallWashers)}" /></label>
-      <label>Secadoras<input id="dryers" type="number" min="1" value="${Number(state.settings.dryers)}" /></label>
-      <label>Minutos lavado<input id="washingMinutes" type="number" min="1" value="${Number(state.settings.washingMinutes)}" /></label>
-      <label>Minutos secado<input id="dryingMinutes" type="number" min="1" value="${Number(state.settings.dryingMinutes)}" /></label>
-      <label>Clave de caja<input id="cashPin" type="password" value="${escapeHtml(state.settings.cashPin)}" /></label>
-      <label class="full">WhatsApp pedido recibido<textarea id="whatsappReceivedMessage">${escapeHtml(state.settings.whatsappReceivedMessage)}</textarea></label>
-      <label class="full">WhatsApp pedido listo<textarea id="whatsappMessage">${escapeHtml(state.settings.whatsappMessage)}</textarea></label>
-      <label class="full">WhatsApp retirado<textarea id="whatsappRetiredMessage">${escapeHtml(state.settings.whatsappRetiredMessage)}</textarea></label>
-      <label>Días para aviso depósito<input id="storageNoticeDays" type="number" min="1" value="${Number(state.settings.storageNoticeDays)}" /></label>
-      <label class="full">Cartel de depósito<textarea id="storageNoticeText">${escapeHtml(state.settings.storageNoticeText)}</textarea></label>
-    </div><br><div class="actions"><button class="primary" data-action="saveSettings">Guardar</button><button class="danger" data-action="resetDemo">Reiniciar demo</button></div></div>`;
-}
-
-
-function openModal(title, html, onSubmit) {
-  const template = document.getElementById("modalTemplate").content.cloneNode(true);
-  template.querySelector("h2").textContent = title;
-  template.querySelector(".modal-body").innerHTML = html;
-  document.body.appendChild(template);
-  const modal = document.querySelector(".modal-backdrop");
-  const form = modal.querySelector("form");
-  if (form) form.addEventListener("submit", (event) => { event.preventDefault(); if (onSubmit) onSubmit(new FormData(form)); });
-  return modal;
-}
-
-function closeModal() {
-  const modal = document.querySelector(".modal-backdrop"); if (modal) modal.remove();
-}
-
-function openClientModal(id) {
-  const client = id ? getClient(id) : { name: "", phone: "", address: "", notes: "", authorizedPickups: "" };
-  openModal(id ? "Editar cliente" : "Nuevo cliente", `<form class="form-grid"><label>Nombre<input name="name" required value="${escapeHtml(client.name)}" /></label><label>Teléfono WhatsApp<input name="phone" required value="${escapeHtml(client.phone)}" /></label><label>Dirección<input name="address" value="${escapeHtml(client.address || "")}" /></label><label>Autorizados a retirar<input name="authorizedPickups" placeholder="Ej: hijo Juan DNI..." value="${escapeHtml(client.authorizedPickups || "")}" /></label><label class="full">Notas<input name="notes" value="${escapeHtml(client.notes || "")}" /></label><button class="primary full">Guardar cliente</button></form>`, (form) => {
-    const data = formDataToObject(form);
-    if (id) Object.assign(client, data); else state.clients.push({ id: nextId(state.clients), ...data });
-    saveState(); closeModal(); render();
-  });
-}
-
-
-function openOrderModal() {
-  const defaultLocation = nextFreeLocation();
-  const firstService = state.services[0];
-  const modal = openModal("Nuevo pedido", `<form class="form-grid">
-    <label>Cliente<select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)} · ${escapeHtml(client.phone)}</option>`).join("")}</select></label>
-    <label>Depósito<select name="location" required>${availableLocations().map((location) => `<option ${location.code === defaultLocation ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
-    <label>Pago<select name="paymentStatus"><option>Pendiente</option><option>Abonado</option></select></label>
-    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo">💵 Efectivo</option><option value="Transferencia">🏦 Transferencia</option></select></label>
-    <div class="full items-builder"><h3>Prendas / trabajos</h3><div data-items-list>
-      ${orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, "")}
-    </div><button class="secondary" type="button" data-add-item>+ Agregar prenda</button></div>
-    <label>Precio total<input name="total" data-items-total type="number" min="0" value="${(firstService && firstService.price) || 0}" /></label>
-    <label class="full">Observaciones<textarea name="notes" placeholder="Ej: Frasada polar roja, manchas, preferencias..."></textarea></label>
-    <button class="primary full">Crear pedido</button>
-  </form>`, (form) => {
-    const data = formDataToObject(form);
-    const createdAt = new Date().toISOString();
-    const items = collectItems(form);
-    const primaryService = getService((items[0] && items[0].serviceId) || (firstService && firstService.id));
-    const schedule = createOrderSchedule(primaryService, createdAt);
-    const orderId = nextId(state.orders);
-    const location = data.location || nextFreeLocation();
-    const total = Number(data.total || items.reduce((sum, item) => sum + Number(item.price || 0), 0));
-    const order = { id: orderId, number: `${location}-#${String(orderId).padStart(4, "0")}`, clientId: Number(data.clientId), serviceId: Number(primaryService.id), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items, total, location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
-    state.orders.push(order);
-    if (order.paymentStatus === "Abonado") syncOrderPayment(order);
-    saveState(); closeModal(); setView("orders");
-  });
-  attachItemBuilder(modal);
-}
-
-function orderItemRow(serviceId, price, name = "") {
-  return `<div class="item-row"><input name="itemName" placeholder="Ej: Frasada polar roja" value="${escapeHtml(name)}" /><select name="itemService">${state.services.map((service) => `<option value="${service.id}" data-price="${service.price}" ${Number(service.id) === Number(serviceId) ? "selected" : ""}>${escapeHtml(service.name)}</option>`).join("")}</select><input name="itemPrice" type="number" min="0" value="${Number(price || 0)}" /><button class="danger" type="button" data-remove-item>×</button></div>`;
-}
-
-function attachItemBuilder(modal) {
-  const list = modal.querySelector("[data-items-list]");
-  const recalc = () => {
-    const total = Array.from(modal.querySelectorAll('[name="itemPrice"]')).reduce((sum, input) => sum + Number(input.value || 0), 0);
-    modal.querySelector("[data-items-total]").value = total;
-  };
-  modal.addEventListener("click", (event) => {
-    if (event.target.matches("[data-add-item]")) { list.insertAdjacentHTML("beforeend", orderItemRow(state.services[0].id, state.services[0].price)); recalc(); }
-    if (event.target.matches("[data-remove-item]")) { { const row = event.target.closest(".item-row"); if (row) row.remove(); } recalc(); }
-  });
-  modal.addEventListener("change", (event) => {
-    if (event.target.matches('[name="itemService"]')) {
-      const price = (event.target.selectedOptions[0] && event.target.selectedOptions[0].dataset.price) || 0;
-      event.target.closest(".item-row").querySelector('[name="itemPrice"]').value = price;
-      recalc();
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
     }
-  });
-  modal.addEventListener("input", (event) => { if (event.target.matches('[name="itemPrice"]')) recalc(); });
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
+window.addEventListener("error", function (event) {
+    var root = document.querySelector(".content");
+    if (!root)
+        return;
+    root.innerHTML = "<section class=\"view active\"><div class=\"card\"><h2>No se pudo iniciar el sistema</h2><p>Prob\u00E1 actualizar el navegador o abrir el sistema con <code>python3 -m http.server 8080</code>.</p><p><strong>Detalle:</strong> ".concat(event.message, "</p></div></section>");
+});
+var STORAGE_KEY = "lavanderia-local-v1";
+var STATES = ["Pendiente", "Listo", "Retirado"];
+var defaultData = {
+    settings: {
+        openHour: "09:00",
+        closeHour: "19:00",
+        washingMinutes: 30,
+        dryingMinutes: 50,
+        smallWashers: 4,
+        dryers: 6,
+        whatsappReceivedMessage: "Hola {cliente}. Recibimos tu pedido {pedido}. {pago}. Te avisamos cuando esté listo. Gracias.",
+        whatsappMessage: "Hola {cliente}. Tu pedido {pedido} ya está listo para retirar. {pago}. Te esperamos.",
+        whatsappRetiredMessage: "Hola {cliente}. Dejamos constancia de que retiró su pedido {pedido} el {fecha}. {pago}. Muchas gracias.",
+        storageNoticeDays: 30,
+        storageNoticeText: "Condiciones de guarda: conforme las condiciones informadas al momento de recepción y el deber de información clara previsto por la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días corridos desde el aviso de disponibilidad podrán generar cargos de guarda y/o ser derivados a donación previa comunicación fehaciente al cliente. Texto sujeto a validación legal local.",
+        cashPin: "1234",
+    },
+    services: [
+        { id: 1, name: "Valet", price: 3500, wash: true, dry: true },
+        { id: 2, name: "Lavado", price: 1800, wash: true, dry: false },
+        { id: 3, name: "Secado", price: 1600, wash: false, dry: true },
+        { id: 4, name: "Lavado + secado", price: 3000, wash: true, dry: true },
+        { id: 5, name: "Otro", price: 0, wash: false, dry: false },
+    ],
+    clients: [
+        { id: 1, name: "María Gómez", phone: "5491112345678", address: "", notes: "Prefiere WhatsApp", authorizedPickups: "Hijo: Lucas Gómez" },
+        { id: 2, name: "Juan Pérez", phone: "5491198765432", address: "", notes: "", authorizedPickups: "" },
+    ],
+    orders: [],
+    cash: [],
+    locations: flatten(["A", "B", "C", "D", "E", "F"].map(function (row) { return Array.from({ length: 6 }, function (_, index) { return "".concat(row).concat(index + 1); }); })).map(function (code, index) { return ({ id: index + 1, code: code }); }),
+};
+function cloneData(value) {
+    try {
+        return JSON.parse(JSON.stringify(value));
+    }
+    catch (error) {
+        console.warn("No se pudo clonar la información inicial", error);
+        return value;
+    }
 }
-
+function safeReplaceAll(value, search, replacement) {
+    return String(value).split(search).join(replacement);
+}
+function storageGet(key) {
+    try {
+        return window.localStorage ? window.localStorage.getItem(key) : null;
+    }
+    catch (error) {
+        console.warn("No se pudo leer el almacenamiento local. El sistema queda en modo temporal.", error);
+        return null;
+    }
+}
+function storageSet(key, value) {
+    try {
+        if (window.localStorage)
+            window.localStorage.setItem(key, value);
+    }
+    catch (error) {
+        console.warn("No se pudo guardar en el almacenamiento local. Revisá permisos del navegador.", error);
+    }
+}
+function formDataToObject(form) {
+    var result = {};
+    if (window.FormData) {
+        var data = new FormData(form);
+        if (data.forEach) {
+            data.forEach(function (value, key) { result[key] = value; });
+            return result;
+        }
+    }
+    Array.from(form.elements).forEach(function (field) {
+        if (field.name && !field.disabled)
+            result[field.name] = field.value;
+    });
+    return result;
+}
+function formatShortDateTime(date) {
+    var value = new Date(date);
+    if (isNaN(value.getTime()))
+        return "Sin estimar";
+    return "".concat(String(value.getDate()).padStart(2, "0"), "/").concat(String(value.getMonth() + 1).padStart(2, "0"), "/").concat(String(value.getFullYear()).slice(-2), " ").concat(String(value.getHours()).padStart(2, "0"), ":").concat(String(value.getMinutes()).padStart(2, "0"));
+}
+function flatten(list) {
+    return Array.prototype.concat.apply([], list);
+}
+var state = loadState();
+var currentView = "dashboard";
+var cashUnlocked = false;
+var selectedMachine = null;
+var scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
+var schedulePreview = null;
+function mergeLocations(defaultLocations, savedLocations) {
+    if (savedLocations === void 0) { savedLocations = []; }
+    var byCode = new Map(__spreadArray(__spreadArray([], defaultLocations, true), (savedLocations || []), true).map(function (location, index) { return [location.code, { id: index + 1, code: location.code }]; }));
+    return __spreadArray([], byCode.values(), true).map(function (location, index) { return (__assign(__assign({}, location), { id: index + 1 })); });
+}
+function currentWeekStart(reference) {
+    var day = reference.getDay() || 7;
+    var monday = new Date(reference);
+    monday.setDate(reference.getDate() - day + 1);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+}
+function loadState() {
+    var defaults = cloneData(defaultData);
+    var saved = storageGet(STORAGE_KEY);
+    if (!saved)
+        return defaults;
+    var parsed;
+    try {
+        parsed = JSON.parse(saved);
+    }
+    catch (error) {
+        console.warn("No se pudieron leer los datos guardados. Se cargan datos iniciales.", error);
+        return defaults;
+    }
+    var merged = __assign(__assign(__assign({}, defaults), parsed), { settings: __assign(__assign({}, defaults.settings), (parsed.settings || {})), services: parsed.services && parsed.services.length ? parsed.services : defaults.services, clients: parsed.clients && parsed.clients.length ? parsed.clients : defaults.clients, orders: parsed.orders || defaults.orders, cash: parsed.cash || defaults.cash, locations: mergeLocations(defaults.locations, parsed.locations) });
+    merged.clients = merged.clients.map(function (client) { return (__assign({ authorizedPickups: "" }, client)); });
+    merged.orders = merged.orders.map(function (order) {
+        var paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
+        var status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
+        var items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0) }];
+        return __assign(__assign({}, order), { status: status, paymentStatus: paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items: items });
+    });
+    return merged;
+}
+function saveState() {
+    storageSet(STORAGE_KEY, JSON.stringify(state));
+}
+function money(value) {
+    return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+function formatDateTime(value) {
+    if (!value)
+        return "Sin estimar";
+    return formatShortDateTime(value);
+}
+function normalizeClass(text) {
+    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ /g, "-");
+}
+function nextId(list) {
+    return list.length ? Math.max.apply(Math, list.map(function (item) { return item.id; })) + 1 : 1;
+}
+function nextOrderNumber() {
+    return String(1000 + nextId(state.orders)).padStart(4, "0");
+}
+function getClient(id) {
+    return state.clients.find(function (client) { return client.id === Number(id); });
+}
+function getService(id) {
+    return state.services.find(function (service) { return service.id === Number(id); });
+}
+function getOrder(id) {
+    return state.orders.find(function (order) { return order.id === Number(id); });
+}
+function serviceSummary(order) {
+    var service = getService(order.serviceId);
+    return service ? service.name : "Servicio eliminado";
+}
+function orderClient(order) {
+    var client = getClient(order.clientId);
+    return client ? client.name : "Cliente eliminado";
+}
+function escapeHtml(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+function availableLocations(currentOrderId) {
+    if (currentOrderId === void 0) { currentOrderId = null; }
+    var busy = new Set(state.orders
+        .filter(function (order) { return order.id !== Number(currentOrderId) && order.location && order.status !== "Retirado"; })
+        .map(function (order) { return order.location; }));
+    return state.locations.filter(function (location) { return !busy.has(location.code); });
+}
+function createOrderSchedule(service, createdAt) {
+    return LaundryScheduler.scheduleOrder(state.orders, service, state.settings, createdAt);
+}
+function currentWeekDays(reference) {
+    if (reference === void 0) { reference = new Date(); }
+    var monday = currentWeekStart(reference);
+    return Array.from({ length: 5 }, function (_, index) {
+        var date = new Date(monday);
+        date.setDate(monday.getDate() + index);
+        return date;
+    });
+}
+function dateKey(date) {
+    return new Date(date).toISOString().slice(0, 10);
+}
+function hourLabel(hour) {
+    return "".concat(String(hour).padStart(2, "0"), ":00");
+}
+function cycleOverlapsHour(cycle, day, hour) {
+    var start = new Date(cycle.start);
+    var end = new Date(cycle.end);
+    var blockStart = new Date(day);
+    blockStart.setHours(hour, 0, 0, 0);
+    var blockEnd = new Date(blockStart);
+    blockEnd.setHours(hour + 1, 0, 0, 0);
+    return start < blockEnd && end > blockStart;
+}
+function monthKey(value) {
+    return new Date(value).toISOString().slice(0, 7);
+}
+function monthlyCashSummary() {
+    var summary = {};
+    state.cash.forEach(function (entry) {
+        var key = monthKey(entry.date);
+        if (!summary[key])
+            summary[key] = { income: 0, expense: 0, cash: 0, transfer: 0 };
+        var amount = Number(entry.amount || 0);
+        if (entry.type === "Ingreso")
+            summary[key].income += amount;
+        if (entry.type === "Egreso")
+            summary[key].expense += amount;
+        if (entry.method === "Efectivo")
+            summary[key].cash += entry.type === "Ingreso" ? amount : -amount;
+        if (entry.method === "Transferencia")
+            summary[key].transfer += entry.type === "Ingreso" ? amount : -amount;
+    });
+    return Object.entries(summary).sort().map(function (_a, index, list) {
+        var month = _a[0], values = _a[1];
+        var balance = values.income - values.expense;
+        var prevBalance = index > 0 ? list[index - 1][1].income - list[index - 1][1].expense : null;
+        var diff = prevBalance ? Math.round(((balance - prevBalance) / Math.abs(prevBalance)) * 100) : null;
+        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff });
+    });
+}
+function messageForOrder(order, type) {
+    var templates = {
+        received: state.settings.whatsappReceivedMessage,
+        ready: state.settings.whatsappMessage,
+        retired: state.settings.whatsappRetiredMessage,
+    };
+    var isPaid = order.paymentStatus === "Abonado";
+    var unpaidText = type === "ready" ? "Para retirar, el total a pagar es ".concat(money(order.total), ".") : "Queda pendiente de pago ".concat(money(order.total), ".");
+    var paymentText = isPaid ? "Ya figura pago por ".concat(order.paymentMethod || "medio registrado", ".") : unpaidText;
+    return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", order.number || order.location || ""), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
+}
+function render() {
+    document.querySelectorAll(".view").forEach(function (view) { return view.classList.toggle("active", view.id === currentView); });
+    document.querySelectorAll(".nav-button").forEach(function (button) { return button.classList.toggle("active", button.dataset.view === currentView); });
+    renderDashboard();
+    renderOrders();
+    renderClients();
+    renderSchedule();
+    renderStorage();
+    renderCash();
+    renderCashReports();
+    renderSettings();
+}
+function setView(view) {
+    if (view === "cash")
+        cashUnlocked = false;
+    currentView = view;
+    render();
+}
+document.querySelectorAll(".nav-button").forEach(function (button) { return button.addEventListener("click", function () { return setView(button.dataset.view); }); });
+document.addEventListener("click", function (event) {
+    var target = event.target.closest("[data-action]");
+    if (!target)
+        return;
+    var action = target.dataset.action;
+    var id = target.dataset.id;
+    var handlers = {
+        newOrder: openOrderModal,
+        newClient: openClientModal,
+        editClient: function () { return openClientModal(id); },
+        editOrderStatus: function () { return openOrderEditModal(id); },
+        orderState: function () { return openOrderStateModal(id); },
+        dashboardTab: function () { return setDashboardTab(target.dataset.tab); },
+        clearOrderDate: clearOrderDate,
+        whatsapp: function () { return openWhatsappMenu(id); },
+        storageNotice: function () { return openStorageNoticeModal(id); },
+        openStorageOrder: function () { return openStorageOrder(id); },
+        prevWeek: function () { return moveScheduleWeek(-7); },
+        nextWeek: function () { return moveScheduleWeek(7); },
+        todayWeek: function () { return setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)); },
+        sendWhatsapp: function () { return sendWhatsapp(id, target.dataset.messageType); },
+        copyNotice: copyVisibleNotice,
+        sendStorageNotice: function () { return sendStorageNotice(id); },
+        machineEdit: function () { return openMachineModal(target.dataset.machine); },
+        cashIncome: function () { return openCashModal("Ingreso"); },
+        cashExpense: function () { return openCashModal("Egreso"); },
+        unlockCash: unlockCash,
+        saveSettings: saveSettings,
+        resetDemo: resetDemo,
+    };
+    if (handlers[action])
+        handlers[action]();
+});
+document.addEventListener("click", function (event) {
+    if (event.target.matches("[data-close-modal]"))
+        closeModal();
+});
+document.addEventListener("input", function (event) {
+    if (event.target.matches("[data-search-orders], [data-order-date]"))
+        applyOrderFilters();
+});
+document.addEventListener("change", function (event) {
+    if (event.target.matches("[data-schedule-week]")) {
+        setScheduleWeek(event.target.value);
+        return;
+    }
+    if (!event.target.matches("[data-service-select]"))
+        return;
+    var selected = event.target.selectedOptions[0];
+    var form = event.target.closest("form");
+    var priceInput = form ? form.querySelector("[name='total']") : null;
+    if (priceInput && selected && selected.dataset.price)
+        priceInput.value = selected.dataset.price;
+});
+function orderDisplayCode(order) {
+    return order.location ? "".concat(order.location, "-#").concat(String(order.id).padStart(4, "0")) : "Sin dep\u00F3sito-#".concat(String(order.id).padStart(4, "0"));
+}
+function itemSummary(order) {
+    return (order.items || []).map(function (item) { return "".concat(item.name, " (").concat(money(item.price), ")"); }).join(" · ") || serviceSummary(order);
+}
+function paymentBadge(order) {
+    var status = order.paymentStatus || "Pendiente";
+    return "<span class=\"payment-badge ".concat(status === "Abonado" ? "paid" : "due", "\">").concat(status === "Abonado" ? "✅ Abonado" : "🟠 Pendiente", "</span>");
+}
+function paymentMethodLabel(method) {
+    return method === "Transferencia" ? "🏦 Transferencia" : "💵 Efectivo";
+}
+function nextFreeLocation() {
+    return (availableLocations()[0] && availableLocations()[0].code) || "";
+}
+var dashboardTab = "Pendiente";
+function orderGroup(order) {
+    if (order.status === "Retirado")
+        return "Retirado";
+    if (order.status === "Listo")
+        return "Listo";
+    return "Pendiente";
+}
+function ordersByGroup(group) {
+    return state.orders.filter(function (order) { return orderGroup(order) === group; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+}
+function setDashboardTab(tab) {
+    dashboardTab = tab;
+    renderDashboard();
+}
+function localDateInput(date) {
+    if (date === void 0) { date = new Date(); }
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function clearOrderDate() {
+    var input = document.getElementById("orderDateFilter");
+    if (input)
+        input.value = "";
+    applyOrderFilters();
+}
+function applyOrderFilters() {
+    var query = (document.getElementById("orderSearch") && document.getElementById("orderSearch").value) || "";
+    var date = (document.getElementById("orderDateFilter") && document.getElementById("orderDateFilter").value) || "";
+    filterOrders(query, date);
+}
+function renderDashboard() {
+    var groups = ["Pendiente", "Listo", "Retirado"];
+    var selectedOrders = ordersByGroup(dashboardTab);
+    document.getElementById("dashboard").innerHTML = "\n    <div class=\"simple-home\">\n      <div class=\"home-actions\"><button class=\"primary big-action\" data-action=\"newOrder\">+ Nuevo pedido</button><button class=\"secondary big-action\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"tabs\">".concat(groups.map(function (group) { return "<button class=\"tab-button ".concat(dashboardTab === group ? "active" : "", "\" data-action=\"dashboardTab\" data-tab=\"").concat(group, "\">").concat(group, "<strong>").concat(ordersByGroup(group).length, "</strong></button>"); }).join(""), "</div>\n      ").concat(orderCards(selectedOrders, "Pedidos ".concat(dashboardTab.toLowerCase(), "s"), true), "\n    </div>");
+}
+function renderOrders() {
+    var today = localDateInput();
+    document.getElementById("orders").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Operaci\u00F3n</p><h2>Pedidos</h2></div><button class=\"primary\" data-action=\"newOrder\">+ Nuevo pedido</button></div>\n      <div class=\"filters-row\"><input id=\"orderSearch\" data-search-orders placeholder=\"Buscar por dep\u00F3sito, cliente, tel\u00E9fono, estado u observaciones\" /><label>Fecha<input id=\"orderDateFilter\" data-order-date type=\"date\" value=\"".concat(today, "\" /></label><button class=\"secondary\" data-action=\"clearOrderDate\">Ver todos</button></div>\n    </div>\n    <div id=\"ordersTable\">").concat(orderCards(state.orders.filter(function (order) { return dateKey(order.createdAt) === today; }).reverse(), "Pedidos del día", false), "</div>\n  ");
+}
+window.filterOrders = function (query, date) {
+    if (date === void 0) { date = ""; }
+    var q = query.toLowerCase();
+    var filtered = state.orders.filter(function (order) {
+        var matchesQuery = "".concat(order.number, " ").concat(order.location || "", " ").concat(orderClient(order), " ").concat((getClient(order.clientId) && getClient(order.clientId).phone) || "", " ").concat(order.status, " ").concat(order.notes || "").toLowerCase().includes(q);
+        var matchesDate = !date || dateKey(order.createdAt) === date;
+        return matchesQuery && matchesDate;
+    });
+    document.getElementById("ordersTable").innerHTML = orderCards(filtered.reverse(), date ? "Pedidos filtrados" : "Todos los pedidos", false);
+};
+function orderCards(orders, title, compact) {
+    if (compact === void 0) { compact = false; }
+    return "\n    <div class=\"card orders-panel\">\n      <h2>".concat(escapeHtml(title), "</h2>\n      <div class=\"order-card-list\">").concat(orders.map(function (order) { return "\n        <article class=\"order-card ".concat(normalizeClass(orderGroup(order)), "\">\n          <div class=\"order-main\"><strong class=\"order-code\">").concat(escapeHtml(orderDisplayCode(order)), "</strong><span class=\"badge ").concat(normalizeClass(orderGroup(order)), "\">").concat(escapeHtml(orderGroup(order)), "</span></div>\n          <div><strong>").concat(escapeHtml(orderClient(order)), "</strong><br><small>").concat(escapeHtml(itemSummary(order)), " \u00B7 ").concat(formatDateTime(order.estimate), "</small></div>\n          <p class=\"order-notes\">").concat(escapeHtml(order.notes || "Sin observaciones"), "</p>\n          <div class=\"order-meta\"><span>Pago: ").concat(paymentBadge(order), " ").concat(paymentMethodLabel(order.paymentMethod), "</span><span>Total: ").concat(money(order.total), "</span></div>\n          <div class=\"actions\"><button class=\"secondary\" data-action=\"orderState\" data-id=\"").concat(order.id, "\">Estado</button><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div>\n        </article>"); }).join("") || "<p>No hay pedidos para mostrar.</p>", "</div>\n    </div>");
+}
+function ordersTable(orders, title) {
+    return orderCards(orders, title, false);
+}
+function renderClients() {
+    document.getElementById("clients").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Personas</p><h2>Clientes</h2></div><button class=\"primary\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"client-card-grid\">".concat(state.clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">\uD83D\uDC64</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><button class=\"secondary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></article>"); }).join(""), "</div>\n    </div>");
+}
+function renderSchedule() {
+    var machines = __spreadArray(__spreadArray([], LaundryScheduler.machineNames("Lavado", state.settings.smallWashers).map(function (name) { return ({ type: "Lavado", name: name }); }), true), LaundryScheduler.machineNames("Secado", state.settings.dryers).map(function (name) { return ({ type: "Secado", name: name }); }), true);
+    var activeCycles = state.orders
+        .filter(function (order) { return order.status !== "Retirado"; })
+        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle) { return (__assign(__assign({}, cycle), { order: order })); })); }, [])
+        .filter(function (cycle) { return cycle.type !== "Preparación"; })
+        .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
+    var weekDays = currentWeekDays(new Date("".concat(scheduleWeekStart, "T00:00:00")));
+    var openHour = Number(state.settings.openHour.split(":")[0]);
+    var closeHour = Number(state.settings.closeHour.split(":")[0]);
+    var hours = Array.from({ length: Math.max(1, closeHour - openHour) }, function (_, index) { return openHour + index; });
+    var washDryMinutes = Number(state.settings.washingMinutes) + Number(state.settings.dryingMinutes);
+    var preview = "";
+    document.getElementById("schedule").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>".concat(weekDays[0].toLocaleDateString("es-AR"), "</strong>. Un valet lavado + secado ocupa aprox. <strong>").concat(washDryMinutes, " minutos</strong>, pero la estimaci\u00F3n real depende de m\u00E1quinas libres.</p></div><div class=\"status-pill light\">").concat(state.settings.smallWashers, " lavarropas \u00B7 ").concat(state.settings.dryers, " secadoras</div></div>\n    <div class=\"card schedule-controls\"><button class=\"secondary\" data-action=\"prevWeek\">\u2190</button><label>Semana<input class=\"week-input\" type=\"date\" data-schedule-week value=\"").concat(scheduleWeekStart, "\" /></label><button class=\"secondary\" data-action=\"todayWeek\">Hoy</button><button class=\"secondary\" data-action=\"nextWeek\">\u2192</button>").concat(preview, "</div>\n    <div class=\"card schedule-card\"><h3>Semana seleccionada</h3><div class=\"timeline-grid\" style=\"--days:").concat(weekDays.length, "\">\n      <div class=\"timeline-head\">Hora</div>").concat(weekDays.map(function (day) { return "<div class=\"timeline-head\">".concat(day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" }), "</div>"); }).join(""), "\n      ").concat(hours.map(function (hour) { return "<div class=\"timeline-hour\">".concat(hourLabel(hour), "</div>").concat(weekDays.map(function (day) {
+        var cycles = activeCycles.filter(function (cycle) { return cycleOverlapsHour(cycle, day, hour); });
+        return "<div class=\"timeline-cell\">".concat(cycles.map(function (cycle) { return "<div class=\"timeline-event ".concat(cycle.type === "Lavado" ? "wash" : "dry", "\"><strong>").concat(escapeHtml(orderClient(cycle.order)), "</strong><span>").concat(escapeHtml(cycle.type), " \u00B7 ").concat(escapeHtml(cycle.machine), "</span><small>").concat(formatDateTime(cycle.start), " \u2192 ").concat(formatDateTime(cycle.end), "</small></div>"); }).join("") || "<span class=\"free-text\">Libre</span>", "</div>");
+    }).join("")); }).join(""), "\n    </div></div>\n    <div class=\"card\"><h3 class=\"machine-section-title\">Lavarropas</h3>").concat(machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles), "<h3 class=\"machine-section-title\">Secadoras</h3>").concat(machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles), "</div>");
+}
+function setScheduleWeek(value) {
+    scheduleWeekStart = currentWeekStart(new Date("".concat(value, "T00:00:00"))).toISOString().slice(0, 10);
+    renderSchedule();
+}
+function moveScheduleWeek(days) {
+    var next = new Date("".concat(scheduleWeekStart, "T00:00:00"));
+    next.setDate(next.getDate() + days);
+    setScheduleWeek(next.toISOString().slice(0, 10));
+}
+function machineBoard(machines, activeCycles) {
+    return "<div class=\"machine-board\">".concat(machines.map(function (machine) {
+        var assigned = activeCycles.filter(function (cycle) { return cycle.machine === machine.name; }).slice(0, 8);
+        return "<button class=\"machine machine-click type-".concat(normalizeClass(machine.type), " ").concat(assigned.length ? "occupied" : "free-machine", "\" data-action=\"machineEdit\" data-machine=\"").concat(escapeHtml(machine.name), "\"><h4>").concat(escapeHtml(machine.name), "</h4><span class=\"badge ").concat(assigned.length ? "blocked" : "free-machine-badge", "\">").concat(assigned.length ? "Ocupada" : "Libre", "</span>").concat(assigned.map(function (cycle) { return "<div class=\"slot\"><strong>".concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong><br><span>").concat(escapeHtml(orderClient(cycle.order)), "</span></div>"); }).join("") || "<div class=\"slot\">Disponible</div>", "</button>");
+    }).join(""), "</div>");
+}
+function openMachineModal(machineName) {
+    selectedMachine = machineName;
+    var assigned = state.orders
+        .filter(function (order) { return order.status !== "Retirado"; })
+        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle) { return (__assign(__assign({}, cycle), { order: order })); })); }, [])
+        .filter(function (cycle) { return cycle.machine === machineName; })
+        .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
+    openModal("M\u00E1quina ".concat(escapeHtml(machineName)), "\n    <div class=\"machine-modal-list\">".concat(assigned.map(function (cycle) { return "<button class=\"slot machine-slot\" data-action=\"openStorageOrder\" data-id=\"".concat(cycle.order.id, "\"><strong>").concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong>").concat(escapeHtml(orderClient(cycle.order)), "<small>").concat(formatDateTime(cycle.start), " \u2192 ").concat(formatDateTime(cycle.end), "</small></button>"); }).join("") || "<p>M\u00E1quina libre. No hay pedidos asignados.</p>", "</div>"));
+}
+function renderStorage() {
+    var occupied = new Map(state.orders.filter(function (order) { return order.location && order.status !== "Retirado"; }).map(function (order) { return [order.location, order]; }));
+    document.getElementById("storage").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Dep\u00F3sito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hac\u00E9 clic en una ubicaci\u00F3n ocupada para abrir el pedido correspondiente.</p></div><button class=\"secondary\" data-action=\"storageNotice\">Ver aviso general</button></div>\n    <div class=\"storage-grid\">".concat(state.locations.map(function (location) {
+        var order = occupied.get(location.code);
+        return order
+            ? "<button class=\"location busy location-button\" data-action=\"openStorageOrder\" data-id=\"".concat(order.id, "\"><h3>").concat(escapeHtml(location.code), "</h3><strong>#").concat(escapeHtml(order.number), "</strong><span>").concat(escapeHtml(orderClient(order)), "</span><small>").concat(escapeHtml(order.status), "</small></button>")
+            : "<article class=\"location free\"><h3>".concat(escapeHtml(location.code), "</h3>Libre</article>");
+    }).join(""), "</div>");
+}
+function openStorageOrder(id) {
+    setView("orders");
+    var input = document.getElementById("orderSearch");
+    var order = getOrder(id);
+    if (input && order) {
+        input.value = order.number;
+        filterOrders(order.number);
+    }
+    openOrderEditModal(id);
+}
+function cashReportHtml() {
+    var rows = monthlyCashSummary();
+    var latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
+    return "\n    <div class=\"card report-panel cash-report-section\"><div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Reportes de caja</p><h2>Comparaci\u00F3n mes a mes</h2></div><span class=\"status-pill light\">Separado de la caja diaria</span></div>\n      <div class=\"grid four report-metrics\">\n        <article class=\"mini-metric\"><span>Ingresos mes</span><strong>".concat(money(latest.income), "</strong></article>\n        <article class=\"mini-metric\"><span>Egresos mes</span><strong>").concat(money(latest.expense), "</strong></article>\n        <article class=\"mini-metric\"><span>Saldo mes</span><strong>").concat(money(latest.balance), "</strong></article>\n        <article class=\"mini-metric\"><span>Vs anterior</span><strong>").concat(latest.diff === null ? "-" : "".concat(latest.diff, "%"), "</strong></article>\n      </div>\n      <div class=\"bar-list\">").concat(rows.map(function (row) {
+        var max = Math.max(row.income, row.expense, 1);
+        return "<div class=\"bar-row\"><div><strong>".concat(row.month, "</strong><small>Saldo ").concat(money(row.balance), " \u00B7 Efectivo ").concat(money(row.cash), " \u00B7 Transf. ").concat(money(row.transfer), "</small></div><div class=\"bars\"><span class=\"bar income\" style=\"width:").concat(Math.max(4, (row.income / max) * 100), "%\"></span><span class=\"bar expense\" style=\"width:").concat(Math.max(4, (row.expense / max) * 100), "%\"></span></div></div>");
+    }).join("") || "<p>Carg\u00E1 movimientos para ver la comparaci\u00F3n mensual.</p>", "</div>\n      <div class=\"table-wrap\"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs mes anterior</th><th>Efectivo</th><th>Transferencia</th></tr></thead><tbody>").concat(rows.map(function (row) { return "<tr><td>".concat(row.month, "</td><td>").concat(money(row.income), "</td><td>").concat(money(row.expense), "</td><td>").concat(money(row.balance), "</td><td>").concat(row.diff === null ? "-" : "".concat(row.diff, "%"), "</td><td>").concat(money(row.cash), "</td><td>").concat(money(row.transfer), "</td></tr>"); }).join("") || "<tr><td colspan=\"7\">Sin movimientos de caja.</td></tr>", "</tbody></table></div>\n    </div>");
+}
+function renderCash() {
+    if (!cashUnlocked) {
+        document.getElementById("cash").innerHTML = "<div class=\"card\"><h2>Caja protegida</h2><p>Ingres\u00E1 la clave del due\u00F1o para ver ingresos, egresos y saldos.</p><div class=\"form-grid\"><label>Clave<input id=\"cashPin\" type=\"password\" placeholder=\"Clave\" /></label></div><br><button class=\"primary\" data-action=\"unlockCash\">Entrar</button><p><small>La clave inicial es 1234 y puede cambiarse desde Configuraci\u00F3n.</small></p></div>";
+        return;
+    }
+    var income = state.cash.filter(function (entry) { return entry.type === "Ingreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount); }, 0);
+    var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount); }, 0);
+    var cash = state.cash.filter(function (entry) { return entry.method === "Efectivo"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
+    var transfer = state.cash.filter(function (entry) { return entry.method === "Transferencia"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
+    document.getElementById("cash").innerHTML = "\n    <div class=\"grid four\"><article class=\"card metric\"><span>Ingresos</span><strong>".concat(money(income), "</strong></article><article class=\"card metric\"><span>Egresos</span><strong>").concat(money(expense), "</strong></article><article class=\"card metric\"><span>Efectivo</span><strong>").concat(money(cash), "</strong></article><article class=\"card metric\"><span>Transferencia</span><strong>").concat(money(transfer), "</strong></article></div>\n    <div class=\"card cash-section\"><div class=\"toolbar\"><h2>Caja del d\u00EDa / movimientos</h2><div class=\"actions\"><button class=\"success\" data-action=\"cashIncome\">+ Ingreso</button><button class=\"danger\" data-action=\"cashExpense\">+ Egreso</button></div></div>").concat(cashTable(), "</div>");
+}
+function cashTable() {
+    return "<div class=\"table-wrap\"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categor\u00EDa</th><th>Descripci\u00F3n</th><th>Medio</th><th>Importe</th></tr></thead><tbody>".concat(__spreadArray([], state.cash, true).reverse().map(function (entry) { return "<tr><td>".concat(formatDateTime(entry.date), "</td><td>").concat(escapeHtml(entry.type), "</td><td>").concat(escapeHtml(entry.category), "</td><td>").concat(escapeHtml(entry.description), "</td><td>").concat(paymentMethodLabel(entry.method), "</td><td>").concat(money(entry.amount), "</td></tr>"); }).join("") || "<tr><td colspan=\"6\">Sin movimientos.</td></tr>", "</tbody></table></div>");
+}
+function renderCashReports() {
+    document.getElementById("cashReports").innerHTML = cashReportHtml();
+}
+function renderSettings() {
+    document.getElementById("settings").innerHTML = "\n    <div class=\"card\"><h2>Configuraci\u00F3n</h2><div class=\"form-grid\">\n      <label>Apertura<input id=\"openHour\" type=\"time\" value=\"".concat(escapeHtml(state.settings.openHour), "\" /></label>\n      <label>Cierre<input id=\"closeHour\" type=\"time\" value=\"").concat(escapeHtml(state.settings.closeHour), "\" /></label>\n      <label>Lavarropas chicos<input id=\"smallWashers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.smallWashers), "\" /></label>\n      <label>Secadoras<input id=\"dryers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryers), "\" /></label>\n      <label>Minutos lavado<input id=\"washingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.washingMinutes), "\" /></label>\n      <label>Minutos secado<input id=\"dryingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryingMinutes), "\" /></label>\n      <label>Clave de caja<input id=\"cashPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.cashPin), "\" /></label>\n      <label class=\"full\">WhatsApp pedido recibido<textarea id=\"whatsappReceivedMessage\">").concat(escapeHtml(state.settings.whatsappReceivedMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp pedido listo<textarea id=\"whatsappMessage\">").concat(escapeHtml(state.settings.whatsappMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp retirado<textarea id=\"whatsappRetiredMessage\">").concat(escapeHtml(state.settings.whatsappRetiredMessage), "</textarea></label>\n      <label>D\u00EDas para aviso dep\u00F3sito<input id=\"storageNoticeDays\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.storageNoticeDays), "\" /></label>\n      <label class=\"full\">Cartel de dep\u00F3sito<textarea id=\"storageNoticeText\">").concat(escapeHtml(state.settings.storageNoticeText), "</textarea></label>\n    </div><br><div class=\"actions\"><button class=\"primary\" data-action=\"saveSettings\">Guardar</button><button class=\"danger\" data-action=\"resetDemo\">Reiniciar demo</button></div></div>");
+}
+function openModal(title, html, onSubmit) {
+    var template = document.getElementById("modalTemplate").content.cloneNode(true);
+    template.querySelector("h2").textContent = title;
+    template.querySelector(".modal-body").innerHTML = html;
+    document.body.appendChild(template);
+    var modal = document.querySelector(".modal-backdrop");
+    var form = modal.querySelector("form");
+    if (form)
+        form.addEventListener("submit", function (event) { event.preventDefault(); if (onSubmit)
+            onSubmit(new FormData(form)); });
+    return modal;
+}
+function closeModal() {
+    var modal = document.querySelector(".modal-backdrop");
+    if (modal)
+        modal.remove();
+}
+function openClientModal(id) {
+    var client = id ? getClient(id) : { name: "", phone: "", address: "", notes: "", authorizedPickups: "" };
+    openModal(id ? "Editar cliente" : "Nuevo cliente", "<form class=\"form-grid\"><label>Nombre<input name=\"name\" required value=\"".concat(escapeHtml(client.name), "\" /></label><label>Tel\u00E9fono WhatsApp<input name=\"phone\" required value=\"").concat(escapeHtml(client.phone), "\" /></label><label>Direcci\u00F3n<input name=\"address\" value=\"").concat(escapeHtml(client.address || ""), "\" /></label><label>Autorizados a retirar<input name=\"authorizedPickups\" placeholder=\"Ej: hijo Juan DNI...\" value=\"").concat(escapeHtml(client.authorizedPickups || ""), "\" /></label><label class=\"full\">Notas<input name=\"notes\" value=\"").concat(escapeHtml(client.notes || ""), "\" /></label><button class=\"primary full\">Guardar cliente</button></form>"), function (form) {
+        var data = formDataToObject(form);
+        if (id)
+            Object.assign(client, data);
+        else
+            state.clients.push(__assign({ id: nextId(state.clients) }, data));
+        saveState();
+        closeModal();
+        render();
+    });
+}
+function openOrderModal() {
+    var defaultLocation = nextFreeLocation();
+    var firstService = state.services[0];
+    var modal = openModal("Nuevo pedido", "<form class=\"form-grid\">\n    <label>Cliente<select name=\"clientId\" required>".concat(state.clients.map(function (client) { return "<option value=\"".concat(client.id, "\">").concat(escapeHtml(client.name), " \u00B7 ").concat(escapeHtml(client.phone), "</option>"); }).join(""), "</select></label>\n    <label>Dep\u00F3sito<select name=\"location\" required>").concat(availableLocations().map(function (location) { return "<option ".concat(location.code === defaultLocation ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option>Pendiente</option><option>Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\">\uD83D\uDCB5 Efectivo</option><option value=\"Transferencia\">\uD83C\uDFE6 Transferencia</option></select></label>\n    <div class=\"full items-builder\"><h3>Prendas / trabajos</h3><div data-items-list>\n      ").concat(orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, ""), "\n    </div><button class=\"secondary\" type=\"button\" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name=\"total\" data-items-total type=\"number\" min=\"0\" value=\"").concat((firstService && firstService.price) || 0, "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\" placeholder=\"Ej: Frasada polar roja, manchas, preferencias...\"></textarea></label>\n    <button class=\"primary full\">Crear pedido</button>\n  </form>"), function (form) {
+        var data = formDataToObject(form);
+        var createdAt = new Date().toISOString();
+        var items = collectItems(form);
+        var primaryService = getService((items[0] && items[0].serviceId) || (firstService && firstService.id));
+        var schedule = createOrderSchedule(primaryService, createdAt);
+        var orderId = nextId(state.orders);
+        var location = data.location || nextFreeLocation();
+        var total = Number(data.total || items.reduce(function (sum, item) { return sum + Number(item.price || 0); }, 0));
+        var order = { id: orderId, number: "".concat(location, "-#").concat(String(orderId).padStart(4, "0")), clientId: Number(data.clientId), serviceId: Number(primaryService.id), createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+        state.orders.push(order);
+        if (order.paymentStatus === "Abonado")
+            syncOrderPayment(order);
+        saveState();
+        closeModal();
+        setView("orders");
+    });
+    attachItemBuilder(modal);
+}
+function orderItemRow(serviceId, price, name) {
+    if (name === void 0) { name = ""; }
+    return "<div class=\"item-row\"><input name=\"itemName\" placeholder=\"Ej: Frasada polar roja\" value=\"".concat(escapeHtml(name), "\" /><select name=\"itemService\">").concat(state.services.map(function (service) { return "<option value=\"".concat(service.id, "\" data-price=\"").concat(service.price, "\" ").concat(Number(service.id) === Number(serviceId) ? "selected" : "", ">").concat(escapeHtml(service.name), "</option>"); }).join(""), "</select><input name=\"itemPrice\" type=\"number\" min=\"0\" value=\"").concat(Number(price || 0), "\" /><button class=\"danger\" type=\"button\" data-remove-item>\u00D7</button></div>");
+}
+function attachItemBuilder(modal) {
+    var list = modal.querySelector("[data-items-list]");
+    var recalc = function () {
+        var total = Array.from(modal.querySelectorAll('[name="itemPrice"]')).reduce(function (sum, input) { return sum + Number(input.value || 0); }, 0);
+        modal.querySelector("[data-items-total]").value = total;
+    };
+    modal.addEventListener("click", function (event) {
+        if (event.target.matches("[data-add-item]")) {
+            list.insertAdjacentHTML("beforeend", orderItemRow(state.services[0].id, state.services[0].price));
+            recalc();
+        }
+        if (event.target.matches("[data-remove-item]")) {
+            {
+                var row = event.target.closest(".item-row");
+                if (row)
+                    row.remove();
+            }
+            recalc();
+        }
+    });
+    modal.addEventListener("change", function (event) {
+        if (event.target.matches('[name="itemService"]')) {
+            var price = (event.target.selectedOptions[0] && event.target.selectedOptions[0].dataset.price) || 0;
+            event.target.closest(".item-row").querySelector('[name="itemPrice"]').value = price;
+            recalc();
+        }
+    });
+    modal.addEventListener("input", function (event) { if (event.target.matches('[name="itemPrice"]'))
+        recalc(); });
+}
 function collectItems(form) {
-  const rows = Array.from(form.querySelectorAll(".item-row"));
-  return rows.map((row) => {
-    const serviceId = Number(row.querySelector('[name="itemService"]').value);
-    const service = getService(serviceId);
-    return { name: row.querySelector('[name="itemName"]').value || service.name, serviceId, serviceName: service.name, price: Number(row.querySelector('[name="itemPrice"]').value || 0) };
-  }).filter((item) => item.name || item.price);
+    var rows = Array.from(form.querySelectorAll(".item-row"));
+    return rows.map(function (row) {
+        var serviceId = Number(row.querySelector('[name="itemService"]').value);
+        var service = getService(serviceId);
+        return { name: row.querySelector('[name="itemName"]').value || service.name, serviceId: serviceId, serviceName: service.name, price: Number(row.querySelector('[name="itemPrice"]').value || 0) };
+    }).filter(function (item) { return item.name || item.price; });
 }
-
 function syncOrderPayment(order) {
-  const existing = state.cash.find((entry) => entry.orderId === order.id && entry.category === "Pedido");
-  if (order.paymentStatus !== "Abonado") {
-    state.cash = state.cash.filter((entry) => !(entry.orderId === order.id && entry.category === "Pedido"));
-    order.paymentSynced = false;
-    return;
-  }
-
-  const payment = { type: "Ingreso", category: "Pedido", description: `${orderClient(order)} ${orderDisplayCode(order)}`, method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
-  if (existing) Object.assign(existing, payment);
-  else state.cash.push({ id: nextId(state.cash), date: new Date().toISOString(), ...payment });
-  order.paymentSynced = true;
+    var existing = state.cash.find(function (entry) { return entry.orderId === order.id && entry.category === "Pedido"; });
+    if (order.paymentStatus !== "Abonado") {
+        state.cash = state.cash.filter(function (entry) { return !(entry.orderId === order.id && entry.category === "Pedido"); });
+        order.paymentSynced = false;
+        return;
+    }
+    var payment = { type: "Ingreso", category: "Pedido", description: "".concat(orderClient(order), " ").concat(orderDisplayCode(order)), method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
+    if (existing)
+        Object.assign(existing, payment);
+    else
+        state.cash.push(__assign({ id: nextId(state.cash), date: new Date().toISOString() }, payment));
+    order.paymentSynced = true;
 }
-
 function openOrderEditModal(id) {
-  const order = getOrder(id);
-  if (!order) return;
-  const locations = availableLocations(order.id);
-  if (order.location && !locations.some((location) => location.code === order.location)) locations.unshift({ id: 0, code: order.location });
-
-  openModal(`Editar pedido ${escapeHtml(order.number)}`, `<form class="form-grid">
-    <label>Depósito / número<select name="location"><option value="">Sin asignar</option>${locations.map((location) => `<option ${location.code === order.location ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
-    <label>Pago<select name="paymentStatus"><option ${order.paymentStatus !== "Abonado" ? "selected" : ""}>Pendiente</option><option ${order.paymentStatus === "Abonado" ? "selected" : ""}>Abonado</option></select></label>
-    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo" ${order.paymentMethod !== "Transferencia" ? "selected" : ""}>💵 Efectivo</option><option value="Transferencia" ${order.paymentMethod === "Transferencia" ? "selected" : ""}>🏦 Transferencia</option></select></label>
-    <label>Precio total<input name="total" type="number" min="0" value="${Number(order.total || 0)}" /></label>
-    <label class="full">Observaciones<textarea name="notes">${escapeHtml(order.notes || "")}</textarea></label>
-    <button class="primary full">Guardar cambios</button>
-  </form>`, (form) => {
-    const data = formDataToObject(form);
-    order.location = data.location;
-    order.number = orderDisplayCode(order);
-    order.paymentStatus = data.paymentStatus;
-    order.paymentMethod = data.paymentMethod;
-    order.total = Number(data.total);
-    order.notes = data.notes;
-    if (order.paymentStatus === "Abonado") order.paymentStatus = "Abonado";
-    syncOrderPayment(order);
-    saveState(); closeModal(); render();
-  });
+    var order = getOrder(id);
+    if (!order)
+        return;
+    var locations = availableLocations(order.id);
+    if (order.location && !locations.some(function (location) { return location.code === order.location; }))
+        locations.unshift({ id: 0, code: order.location });
+    openModal("Editar pedido ".concat(escapeHtml(order.number)), "<form class=\"form-grid\">\n    <label>Dep\u00F3sito / n\u00FAmero<select name=\"location\"><option value=\"\">Sin asignar</option>".concat(locations.map(function (location) { return "<option ".concat(location.code === order.location ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option ").concat(order.paymentStatus !== "Abonado" ? "selected" : "", ">Pendiente</option><option ").concat(order.paymentStatus === "Abonado" ? "selected" : "", ">Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\" ").concat(order.paymentMethod !== "Transferencia" ? "selected" : "", ">\uD83D\uDCB5 Efectivo</option><option value=\"Transferencia\" ").concat(order.paymentMethod === "Transferencia" ? "selected" : "", ">\uD83C\uDFE6 Transferencia</option></select></label>\n    <label>Precio total<input name=\"total\" type=\"number\" min=\"0\" value=\"").concat(Number(order.total || 0), "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\">").concat(escapeHtml(order.notes || ""), "</textarea></label>\n    <button class=\"primary full\">Guardar cambios</button>\n  </form>"), function (form) {
+        var data = formDataToObject(form);
+        order.location = data.location;
+        order.number = orderDisplayCode(order);
+        order.paymentStatus = data.paymentStatus;
+        order.paymentMethod = data.paymentMethod;
+        order.total = Number(data.total);
+        order.notes = data.notes;
+        if (order.paymentStatus === "Abonado")
+            order.paymentStatus = "Abonado";
+        syncOrderPayment(order);
+        saveState();
+        closeModal();
+        render();
+    });
 }
-
 function openOrderStateModal(id) {
-  const order = getOrder(id);
-  if (!order) return;
-  openModal(`Cambiar estado ${escapeHtml(order.number)}`, `<form class="state-grid">
-    ${STATES.map((status) => `<label class="state-option ${status === order.status ? "selected" : ""}"><input type="radio" name="status" value="${status}" ${status === order.status ? "checked" : ""} /> <span>${status}</span></label>`).join("")}
-    <button class="primary full">Guardar estado</button>
-  </form>`, (form) => {
-    const data = formDataToObject(form);
-    order.status = data.status;
-    if (order.status === "Retirado") order.location = "";
-    saveState(); closeModal(); render();
-  });
+    var order = getOrder(id);
+    if (!order)
+        return;
+    openModal("Cambiar estado ".concat(escapeHtml(order.number)), "<form class=\"state-grid\">\n    ".concat(STATES.map(function (status) { return "<label class=\"state-option ".concat(status === order.status ? "selected" : "", "\"><input type=\"radio\" name=\"status\" value=\"").concat(status, "\" ").concat(status === order.status ? "checked" : "", " /> <span>").concat(status, "</span></label>"); }).join(""), "\n    <button class=\"primary full\">Guardar estado</button>\n  </form>"), function (form) {
+        var data = formDataToObject(form);
+        order.status = data.status;
+        if (order.status === "Retirado")
+            order.location = "";
+        saveState();
+        closeModal();
+        render();
+    });
 }
-
-function storageNoticeText(order = null) {
-  const base = safeReplaceAll(state.settings.storageNoticeText, "{dias}", state.settings.storageNoticeDays);
-  if (!order) return base;
-  return `${base}\n\nPedido #${order.number} - Cliente: ${orderClient(order)} - Ubicación: ${order.location || "sin asignar"}.`;
+function storageNoticeText(order) {
+    if (order === void 0) { order = null; }
+    var base = safeReplaceAll(state.settings.storageNoticeText, "{dias}", state.settings.storageNoticeDays);
+    if (!order)
+        return base;
+    return "".concat(base, "\n\nPedido #").concat(order.number, " - Cliente: ").concat(orderClient(order), " - Ubicaci\u00F3n: ").concat(order.location || "sin asignar", ".");
 }
-
 function sendWhatsapp(id, type) {
-  const order = getOrder(id);
-  const phone = ((getClient(order.clientId) && getClient(order.clientId).phone) || "").replace(/\D/g, "");
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(messageForOrder(order, type))}`, "_blank");
+    var order = getOrder(id);
+    var phone = ((getClient(order.clientId) && getClient(order.clientId).phone) || "").replace(/\D/g, "");
+    window.open("https://wa.me/".concat(phone, "?text=").concat(encodeURIComponent(messageForOrder(order, type))), "_blank");
 }
-
 function openWhatsappMenu(id) {
-  const order = getOrder(id);
-  if (!order) return;
-  openModal(`Mensajes WhatsApp #${escapeHtml(order.number)}`, `
-    <div class="message-list">
-      <button class="secondary" data-action="sendWhatsapp" data-message-type="received" data-id="${order.id}">Recibimos tu pedido</button>
-      <button class="success" data-action="sendWhatsapp" data-message-type="ready" data-id="${order.id}">Tu pedido está listo</button>
-      <button class="secondary" data-action="sendWhatsapp" data-message-type="retired" data-id="${order.id}">Retiró su pedido</button>
-      <div class="copy-row"><button class="secondary" data-action="copyWhatsapp" data-message-type="received" data-id="${order.id}">Copiar recibido</button><button class="secondary" data-action="copyWhatsapp" data-message-type="ready" data-id="${order.id}">Copiar listo</button><button class="secondary" data-action="copyWhatsapp" data-message-type="retired" data-id="${order.id}">Copiar retirado</button></div>
-      <textarea readonly>${escapeHtml(messageForOrder(order, "ready"))}</textarea>
-    </div>`);
+    var order = getOrder(id);
+    if (!order)
+        return;
+    openModal("Mensajes WhatsApp #".concat(escapeHtml(order.number)), "\n    <div class=\"message-list\">\n      <button class=\"secondary\" data-action=\"sendWhatsapp\" data-message-type=\"received\" data-id=\"".concat(order.id, "\">Recibimos tu pedido</button>\n      <button class=\"success\" data-action=\"sendWhatsapp\" data-message-type=\"ready\" data-id=\"").concat(order.id, "\">Tu pedido est\u00E1 listo</button>\n      <button class=\"secondary\" data-action=\"sendWhatsapp\" data-message-type=\"retired\" data-id=\"").concat(order.id, "\">Retir\u00F3 su pedido</button>\n      <div class=\"copy-row\"><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"received\" data-id=\"").concat(order.id, "\">Copiar recibido</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"ready\" data-id=\"").concat(order.id, "\">Copiar listo</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"retired\" data-id=\"").concat(order.id, "\">Copiar retirado</button></div>\n      <textarea readonly>").concat(escapeHtml(messageForOrder(order, "ready")), "</textarea>\n    </div>"));
 }
-
-function copyWhatsapp(id, type = "ready") {
-  const text = messageForOrder(getOrder(id), type);
-  if (navigator.clipboard) navigator.clipboard.writeText(text);
-  else prompt("Copiá el mensaje para WhatsApp", text);
-  alert("Mensaje preparado para enviar manualmente por WhatsApp.");
+function copyWhatsapp(id, type) {
+    if (type === void 0) { type = "ready"; }
+    var text = messageForOrder(getOrder(id), type);
+    if (navigator.clipboard)
+        navigator.clipboard.writeText(text);
+    else
+        prompt("Copiá el mensaje para WhatsApp", text);
+    alert("Mensaje preparado para enviar manualmente por WhatsApp.");
 }
-
 function openStorageNoticeModal(id) {
-  const order = id ? getOrder(id) : null;
-  const text = storageNoticeText(order);
-  openModal(order ? `Cartel depósito #${escapeHtml(order.number)}` : "Cartel general de depósito", `
-    <textarea class="notice-text" readonly>${escapeHtml(text)}</textarea>
-    <div class="actions"><button class="primary" data-action="copyNotice">Copiar cartel</button>${order ? `<button class="success" data-action="sendStorageNotice" data-id="${order.id}">Enviar al cliente</button>` : ""}</div>`);
+    var order = id ? getOrder(id) : null;
+    var text = storageNoticeText(order);
+    openModal(order ? "Cartel dep\u00F3sito #".concat(escapeHtml(order.number)) : "Cartel general de depósito", "\n    <textarea class=\"notice-text\" readonly>".concat(escapeHtml(text), "</textarea>\n    <div class=\"actions\"><button class=\"primary\" data-action=\"copyNotice\">Copiar cartel</button>").concat(order ? "<button class=\"success\" data-action=\"sendStorageNotice\" data-id=\"".concat(order.id, "\">Enviar al cliente</button>") : "", "</div>"));
 }
-
 function copyVisibleNotice() {
-  const text = (document.querySelector(".notice-text") && document.querySelector(".notice-text").value) || "";
-  if (navigator.clipboard) navigator.clipboard.writeText(text);
-  else prompt("Copiá el cartel", text);
-  alert("Cartel copiado/preparado.");
+    var text = (document.querySelector(".notice-text") && document.querySelector(".notice-text").value) || "";
+    if (navigator.clipboard)
+        navigator.clipboard.writeText(text);
+    else
+        prompt("Copiá el cartel", text);
+    alert("Cartel copiado/preparado.");
 }
-
 function sendStorageNotice(id) {
-  const order = getOrder(id);
-  const phone = ((getClient(order.clientId) && getClient(order.clientId).phone) || "").replace(/\D/g, "");
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(storageNoticeText(order))}`, "_blank");
+    var order = getOrder(id);
+    var phone = ((getClient(order.clientId) && getClient(order.clientId).phone) || "").replace(/\D/g, "");
+    window.open("https://wa.me/".concat(phone, "?text=").concat(encodeURIComponent(storageNoticeText(order))), "_blank");
 }
-
 function unlockCash() {
-  cashUnlocked = document.getElementById("cashPin").value === state.settings.cashPin;
-  if (!cashUnlocked) alert("Clave incorrecta");
-  render();
+    cashUnlocked = document.getElementById("cashPin").value === state.settings.cashPin;
+    if (!cashUnlocked)
+        alert("Clave incorrecta");
+    render();
 }
-
 function openCashModal(type) {
-  const categories = type === "Ingreso" ? ["Pedido", "Seña", "Otro"] : ["Agua", "Luz", "Gas", "Insumos", "Alquiler", "Otros servicios"];
-  openModal(`${type} de caja`, `<form class="form-grid"><label>Categoría<select name="category">${categories.map((category) => `<option>${escapeHtml(category)}</option>`).join("")}</select></label><label>Medio<select name="method"><option value="Efectivo">💵 Efectivo</option><option value="Transferencia">🏦 Transferencia</option></select></label><label>Importe<input name="amount" type="number" min="0" required /></label><label>Descripción<input name="description" required /></label><button class="primary full">Guardar ${type.toLowerCase()}</button></form>`, (form) => {
-    state.cash.push({ id: nextId(state.cash), type, date: new Date().toISOString(), ...formDataToObject(form) });
-    saveState(); closeModal(); render();
-  });
+    var categories = type === "Ingreso" ? ["Pedido", "Seña", "Otro"] : ["Agua", "Luz", "Gas", "Insumos", "Alquiler", "Otros servicios"];
+    openModal("".concat(type, " de caja"), "<form class=\"form-grid\"><label>Categor\u00EDa<select name=\"category\">".concat(categories.map(function (category) { return "<option>".concat(escapeHtml(category), "</option>"); }).join(""), "</select></label><label>Medio<select name=\"method\"><option value=\"Efectivo\">\uD83D\uDCB5 Efectivo</option><option value=\"Transferencia\">\uD83C\uDFE6 Transferencia</option></select></label><label>Importe<input name=\"amount\" type=\"number\" min=\"0\" required /></label><label>Descripci\u00F3n<input name=\"description\" required /></label><button class=\"primary full\">Guardar ").concat(type.toLowerCase(), "</button></form>"), function (form) {
+        state.cash.push(__assign({ id: nextId(state.cash), type: type, date: new Date().toISOString() }, formDataToObject(form)));
+        saveState();
+        closeModal();
+        render();
+    });
 }
-
-
 function saveSettings() {
-  ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappMessage", "whatsappRetiredMessage", "storageNoticeText", "cashPin"].forEach((key) => state.settings[key] = document.getElementById(key).value);
-  ["smallWashers", "dryers", "washingMinutes", "dryingMinutes", "storageNoticeDays"].forEach((key) => state.settings[key] = Number(document.getElementById(key).value));
-  saveState(); render();
+    ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappMessage", "whatsappRetiredMessage", "storageNoticeText", "cashPin"].forEach(function (key) { return state.settings[key] = document.getElementById(key).value; });
+    ["smallWashers", "dryers", "washingMinutes", "dryingMinutes", "storageNoticeDays"].forEach(function (key) { return state.settings[key] = Number(document.getElementById(key).value); });
+    saveState();
+    render();
 }
-
 function resetDemo() {
-  if (!confirm("¿Reiniciar datos de demostración?")) return;
-  state = cloneData(defaultData);
-  cashUnlocked = false;
-  saveState(); render();
+    if (!confirm("¿Reiniciar datos de demostración?"))
+        return;
+    state = cloneData(defaultData);
+    cashUnlocked = false;
+    saveState();
+    render();
 }
-
 render();

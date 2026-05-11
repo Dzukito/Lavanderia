@@ -4,6 +4,8 @@ const { readFileSync } = require('node:fs');
 const html = readFileSync('index.html', 'utf8');
 const app = readFileSync('app.js', 'utf8');
 const styles = readFileSync('styles.css', 'utf8');
+const scheduler = readFileSync('scheduler.js', 'utf8');
+const polyfills = readFileSync('polyfills.js', 'utf8');
 
 for (const section of ['Pedidos', 'Clientes', 'Turnos', 'Depósito', 'Caja', 'Caja mensual', 'Config.']) {
   assert.match(html, new RegExp(section), `missing navigation section ${section}`);
@@ -49,12 +51,17 @@ assert.doesNotMatch(app, /\|\|=/, 'app should avoid logical assignment to suppor
 assert.doesNotMatch(app, /Object\.fromEntries/, 'app should avoid Object.fromEntries to support older browsers');
 assert.doesNotMatch(app, /dateStyle|timeStyle/, 'app should avoid newer Intl dateStyle/timeStyle options');
 assert.doesNotMatch(app, /Number\.isNaN/, 'app should avoid Number.isNaN to support older browsers');
+assert.doesNotMatch(app + scheduler + polyfills, /=>|`|\bconst\b|\blet\b|\?\./, 'runtime scripts should avoid syntax that breaks old browsers at parse time');
+assert.match(html, /polyfills\.js[\s\S]*scheduler\.js[\s\S]*app\.js/, 'polyfills should load before runtime scripts');
+assert.match(polyfills, /Array\.from/, 'polyfills should cover Array.from used by compiled scripts');
+assert.match(polyfills, /window\.Map/, 'polyfills should cover Map used by compiled scripts');
+assert.match(polyfills, /elementPrototype\.closest/, 'polyfills should cover delegated click helpers');
 assert.doesNotMatch(app, /Cantidad de valets/, 'new order should use manual items instead of valet quantity');
 assert.match(app, /data-items-list/, 'new order should include manual item rows');
-assert.match(app, /description: `\$\{orderClient\(order\)\} \$\{orderDisplayCode\(order\)\}`/, 'cash payment description should include client and order code');
-assert.match(app, /const STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
+assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
+assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
-assert.match(app, /if \(view === \"cash\"\) cashUnlocked = false/, 'cash view should request PIN every time');
+assert.match(app, /if \(view === "cash"\)[\s\S]{0,40}cashUnlocked = false/, 'cash view should request PIN every time');
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 

@@ -47,7 +47,7 @@ Luego abrir `http://localhost:8080`.
 
 - Actualizar el navegador de la PC de la lavandería.
 - Abrirlo con el servidor local recomendado: `python3 -m http.server 8080` y entrar a `http://localhost:8080`.
-- Esta versión evita funciones modernas que podían romper navegadores viejos y muestra un mensaje de error visible si algo falla al iniciar.
+- Esta versión carga `polyfills.js` antes de la agenda y la app, y los scripts principales están publicados en sintaxis ES5 para evitar errores de parseo en navegadores viejos.
 
 ## Aviso legal de depósito
 
