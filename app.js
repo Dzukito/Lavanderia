@@ -19,7 +19,22 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 };
+var appStarted = false;
+function isOpaqueExternalError(event) {
+    var message = event && event.message ? event.message : "";
+    return (message === "Script error." || message === "Script error") && !(event && event.filename) && !(event && event.error);
+}
 window.addEventListener("error", function (event) {
+    if (isOpaqueExternalError(event)) {
+        if (window.console && console.warn)
+            console.warn("Se ignoró un error externo sin detalle del navegador/extensión.", event);
+        return;
+    }
+    if (appStarted) {
+        if (window.console && console.error)
+            console.error("Error no crítico luego del arranque", event && (event.error || event.message || event));
+        return;
+    }
     var root = document.querySelector(".content");
     if (!root)
         return;
@@ -797,3 +812,4 @@ function resetDemo() {
     render();
 }
 render();
+appStarted = true;

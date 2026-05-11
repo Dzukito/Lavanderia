@@ -63,7 +63,9 @@ context.document = {
     return [];
   },
 };
-context.addEventListener = () => {};
+context.addEventListener = (type, handler) => {
+  if (type === 'error') context.errorHandler = handler;
+};
 
 vm.createContext(context);
 for (const file of ['polyfills.js', 'scheduler.js', 'app.js']) {
@@ -73,5 +75,10 @@ for (const file of ['polyfills.js', 'scheduler.js', 'app.js']) {
 assert.match(elements.dashboard.innerHTML, /Nuevo pedido|Pedidos pendientes/, 'dashboard should render during startup');
 assert.match(elements.cash.innerHTML, /Caja protegida/, 'cash view should render locked during startup');
 assert.match(elements.settings.innerHTML, /Configuración/, 'settings should render during startup');
+
+const dashboardBeforeExternalError = elements.dashboard.innerHTML;
+assert.equal(typeof context.errorHandler, 'function', 'global error handler should be registered');
+context.errorHandler({ message: 'Script error.' });
+assert.equal(elements.dashboard.innerHTML, dashboardBeforeExternalError, 'opaque external script errors should not replace the app UI');
 
 console.log('Startup smoke test passed');
