@@ -34,6 +34,7 @@ const defaultData = {
 let state = loadState();
 let currentView = "dashboard";
 let cashUnlocked = false;
+let selectedMachine = null;
 let scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
 let schedulePreview = null;
 
@@ -211,7 +212,8 @@ function messageForOrder(order, type) {
     retired: state.settings.whatsappRetiredMessage,
   };
   const isPaid = order.paymentStatus === "Abonado";
-  const paymentText = isPaid ? `Ya figura pago por ${order.paymentMethod || "medio registrado"}.` : `Queda pendiente de pago ${money(order.total)}.`;
+  const unpaidText = type === "ready" ? `Para retirar, el total a pagar es ${money(order.total)}.` : `Queda pendiente de pago ${money(order.total)}.`;
+  const paymentText = isPaid ? `Ya figura pago por ${order.paymentMethod || "medio registrado"}.` : unpaidText;
   return templates[type]
     .replaceAll("{cliente}", orderClient(order))
     .replaceAll("{pedido}", order.number || order.location || "")
@@ -230,10 +232,12 @@ function render() {
   renderSchedule();
   renderStorage();
   renderCash();
+  renderCashReports();
   renderSettings();
 }
 
 function setView(view) {
+  if (view === "cash") cashUnlocked = false;
   currentView = view;
   render();
 }
@@ -241,16 +245,17 @@ function setView(view) {
 document.querySelectorAll(".nav-button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 
 document.addEventListener("click", (event) => {
-  const action = event.target.dataset.action;
-  if (!action) return;
-  const id = event.target.dataset.id;
+  const target = event.target.closest("[data-action]");
+  if (!target) return;
+  const action = target.dataset.action;
+  const id = target.dataset.id;
   const handlers = {
     newOrder: openOrderModal,
     newClient: openClientModal,
     editClient: () => openClientModal(id),
     editOrderStatus: () => openOrderEditModal(id),
     orderState: () => openOrderStateModal(id),
-    dashboardTab: () => setDashboardTab(event.target.dataset.tab),
+    dashboardTab: () => setDashboardTab(target.dataset.tab),
     clearOrderDate: clearOrderDate,
     whatsapp: () => openWhatsappMenu(id),
     storageNotice: () => openStorageNoticeModal(id),
@@ -259,9 +264,10 @@ document.addEventListener("click", (event) => {
     nextWeek: () => moveScheduleWeek(7),
     todayWeek: () => setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)),
 
-    sendWhatsapp: () => sendWhatsapp(id, event.target.dataset.messageType),
+    sendWhatsapp: () => sendWhatsapp(id, target.dataset.messageType),
     copyNotice: copyVisibleNotice,
     sendStorageNotice: () => sendStorageNotice(id),
+    machineEdit: () => openMachineModal(target.dataset.machine),
     cashIncome: () => openCashModal("Ingreso"),
     cashExpense: () => openCashModal("Egreso"),
     unlockCash: unlockCash,
@@ -289,6 +295,10 @@ document.addEventListener("change", (event) => {
   const priceInput = event.target.closest("form")?.querySelector("[name='total']");
   if (priceInput && selected?.dataset.price) priceInput.value = selected.dataset.price;
 });
+
+function orderDisplayCode(order) {
+  return order.location ? `${order.location} - ${order.id}` : `Sin depósito - ${order.id}`;
+}
 
 let dashboardTab = "Pendiente";
 
@@ -361,7 +371,7 @@ function orderCards(orders, title, compact = false) {
       <h2>${escapeHtml(title)}</h2>
       <div class="order-card-list">${orders.map((order) => `
         <article class="order-card ${normalizeClass(orderGroup(order))}">
-          <div class="order-main"><strong class="order-code">${escapeHtml(order.number || order.location || "Sin depósito")}</strong><span class="badge ${normalizeClass(orderGroup(order))}">${escapeHtml(orderGroup(order))}</span></div>
+          <div class="order-main"><strong class="order-code">${escapeHtml(orderDisplayCode(order))}</strong><span class="badge ${normalizeClass(orderGroup(order))}">${escapeHtml(orderGroup(order))}</span></div>
           <div><strong>${escapeHtml(orderClient(order))}</strong><br><small>${escapeHtml(serviceSummary(order))} · ${Number(order.valets || 0)} valet(s) · ${formatDateTime(order.estimate)}</small></div>
           <p class="order-notes">${escapeHtml(order.notes || "Sin observaciones")}</p>
           <div class="order-meta"><span>Pago: ${escapeHtml(order.paymentStatus || "Pendiente")}</span><span>Total: ${money(order.total)}</span></div>
@@ -402,7 +412,7 @@ function renderSchedule() {
 
   document.getElementById("schedule").innerHTML = `
     <div class="card hero-card"><div><p class="eyebrow-dark">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>${weekDays[0].toLocaleDateString("es-AR")}</strong>. Un valet lavado + secado ocupa aprox. <strong>${washDryMinutes} minutos</strong>, pero la estimación real depende de máquinas libres.</p></div><div class="status-pill light">${state.settings.smallWashers} lavarropas · ${state.settings.dryers} secadoras</div></div>
-    <div class="card"><div class="toolbar"><h3>Controles de agenda</h3><div class="actions"><button class="secondary" data-action="prevWeek">← Semana anterior</button><input class="week-input" type="date" data-schedule-week value="${scheduleWeekStart}" /><button class="secondary" data-action="todayWeek">Semana actual</button><button class="secondary" data-action="nextWeek">Semana siguiente →</button></div></div>${preview}</div>
+    <div class="card schedule-controls"><button class="secondary" data-action="prevWeek">←</button><label>Semana<input class="week-input" type="date" data-schedule-week value="${scheduleWeekStart}" /></label><button class="secondary" data-action="todayWeek">Hoy</button><button class="secondary" data-action="nextWeek">→</button>${preview}</div>
     <div class="card schedule-card"><h3>Semana seleccionada</h3><div class="timeline-grid" style="--days:${weekDays.length}">
       <div class="timeline-head">Hora</div>${weekDays.map((day) => `<div class="timeline-head">${day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" })}</div>`).join("")}
       ${hours.map((hour) => `<div class="timeline-hour">${hourLabel(hour)}</div>${weekDays.map((day) => {
@@ -412,7 +422,7 @@ function renderSchedule() {
     </div></div>
     <div class="card"><h3 class="machine-section-title">Lavadoras y secadoras</h3><div class="machine-board">${machines.map((machine) => {
       const assigned = activeCycles.filter((cycle) => cycle.machine === machine.name).slice(0, 8);
-      return `<article class="machine type-${normalizeClass(machine.type)}"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${machine.type === "Lavado" ? "en-lavado" : "en-secado"}">${machine.type}</span>${assigned.map((cycle) => `<div class="slot"><strong>#${escapeHtml(cycle.order.number)}</strong> ${escapeHtml(orderClient(cycle.order))}<br><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<div class="slot">Libre</div>`}</article>`;
+      return `<button class="machine machine-click type-${normalizeClass(machine.type)} ${assigned.length ? "occupied" : ""}" data-action="machineEdit" data-machine="${escapeHtml(machine.name)}"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${assigned.length ? "blocked" : machine.type === "Lavado" ? "en-lavado" : "en-secado"}">${assigned.length ? "Ocupada" : machine.type}</span>${assigned.map((cycle) => `<div class="slot"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong> ${escapeHtml(orderClient(cycle.order))}<br><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<div class="slot">Libre</div>`}</button>`;
     }).join("")}</div></div>`;
 }
 
@@ -425,6 +435,17 @@ function moveScheduleWeek(days) {
   const next = new Date(`${scheduleWeekStart}T00:00:00`);
   next.setDate(next.getDate() + days);
   setScheduleWeek(next.toISOString().slice(0, 10));
+}
+
+function openMachineModal(machineName) {
+  selectedMachine = machineName;
+  const assigned = state.orders
+    .filter((order) => order.status !== "Retirado")
+    .flatMap((order) => (order.cycles || []).map((cycle) => ({ ...cycle, order })))
+    .filter((cycle) => cycle.machine === machineName)
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+  openModal(`Máquina ${escapeHtml(machineName)}`, `
+    <div class="machine-modal-list">${assigned.map((cycle) => `<button class="slot machine-slot" data-action="openStorageOrder" data-id="${cycle.order.id}"><strong>${escapeHtml(orderDisplayCode(cycle.order))}</strong>${escapeHtml(orderClient(cycle.order))}<small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></button>`).join("") || `<p class="notice">Máquina libre. No hay pedidos asignados.</p>`}</div>`);
 }
 
 function renderStorage() {
@@ -482,12 +503,15 @@ function renderCash() {
   const transfer = state.cash.filter((entry) => entry.method === "Transferencia").reduce((sum, entry) => sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)), 0);
   document.getElementById("cash").innerHTML = `
     <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>${money(income)}</strong></article><article class="card metric"><span>Egresos</span><strong>${money(expense)}</strong></article><article class="card metric"><span>Efectivo</span><strong>${money(cash)}</strong></article><article class="card metric"><span>Transferencia</span><strong>${money(transfer)}</strong></article></div>
-    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>
-    ${cashReportHtml()}`;
+    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>`;
 }
 
 function cashTable() {
   return `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>${[...state.cash].reverse().map((entry) => `<tr><td>${formatDateTime(entry.date)}</td><td>${escapeHtml(entry.type)}</td><td>${escapeHtml(entry.category)}</td><td>${escapeHtml(entry.description)}</td><td>${escapeHtml(entry.method)}</td><td>${money(entry.amount)}</td></tr>`).join("") || `<tr><td colspan="6">Sin movimientos.</td></tr>`}</tbody></table></div>`;
+}
+
+function renderCashReports() {
+  document.getElementById("cashReports").innerHTML = cashReportHtml();
 }
 
 
@@ -552,8 +576,9 @@ function openOrderModal() {
     const createdAt = new Date().toISOString();
     const service = getService(data.serviceId);
     const schedule = createOrderSchedule(service, createdAt);
-    const location = data.location || `P${nextOrderNumber()}`;
-    const order = { id: nextId(state.orders), number: location, clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+    const orderId = nextId(state.orders);
+    const location = data.location || "";
+    const order = { id: orderId, number: location ? `${location} - ${orderId}` : `Sin depósito - ${orderId}`, clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
     state.orders.push(order);
     if (order.paymentStatus === "Abonado") syncOrderPayment(order);
     saveState(); closeModal(); setView("orders");
@@ -591,7 +616,7 @@ function openOrderEditModal(id) {
   </form>`, (form) => {
     const data = Object.fromEntries(form.entries());
     order.location = data.location;
-    order.number = data.location || order.number;
+    order.number = orderDisplayCode(order);
     order.paymentStatus = data.paymentStatus;
     order.paymentMethod = data.paymentMethod;
     order.total = Number(data.total);

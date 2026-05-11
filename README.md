@@ -20,7 +20,7 @@ Luego abrir `http://localhost:8080`.
 ## Funciones incluidas
 
 - Clientes con nombre, teléfono, dirección, notas, historial de pedidos y personas autorizadas a retirar.
-- Pedidos con código visible igual al depósito asignado, servicio, valets, paquetes, estado simple, horario estimado, precio, pago, medio de pago y observaciones visibles.
+- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2 - 1001`, servicio, valets, paquetes, estado simple, horario estimado, precio, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
 - Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.
@@ -30,7 +30,7 @@ Luego abrir `http://localhost:8080`.
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
 - Caja protegida con clave inicial `1234`, editable desde configuración, ingresos, egresos, efectivo y transferencia; al marcar un pedido como abonado se genera el ingreso correspondiente.
 - Gastos por categorías como agua, luz, gas, insumos, alquiler y otros servicios.
-- Reportes de caja integrados dentro de **Caja**, con tarjetas y comparación mes a mes de ingresos, egresos, saldo, efectivo y transferencia.
+- Caja diaria protegida por clave cada vez que se entra y comparación mensual en la pantalla separada **Caja mensual**, con tarjetas de ingresos, egresos, saldo, efectivo y transferencia.
 - Configuración de horarios, máquinas, ciclos y mensaje de WhatsApp.
 
 ## Flujo diario sugerido
@@ -41,7 +41,7 @@ Luego abrir `http://localhost:8080`.
 4. Cambiar el estado con el botón **Estado** y editar datos de pago/observaciones con **Editar**.
 5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.
-7. Revisar caja con la clave del dueño; la caja del día queda separada de la comparación mensual.
+7. Revisar caja con la clave del dueño cada vez que se entra; la caja diaria queda separada de **Caja mensual**.
 
 ## Aviso legal de depósito
 
