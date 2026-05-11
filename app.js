@@ -1,5 +1,5 @@
 const STORAGE_KEY = "lavanderia-local-v1";
-const STATES = ["Recibido", "En lavado", "En secado", "Listo para retirar", "Retirado", "Abonado"];
+const STATES = ["Pendiente", "Listo", "Retirado"];
 const defaultData = {
   settings: {
     openHour: "09:00",
@@ -8,11 +8,9 @@ const defaultData = {
     dryingMinutes: 50,
     smallWashers: 4,
     dryers: 6,
-    whatsappReceivedMessage: "Hola {cliente}. Recibimos tu pedido #{pedido}. Te avisamos cuando esté listo. Gracias.",
-    whatsappWorkingMessage: "Hola {cliente}. Tu pedido #{pedido} ya está en proceso. Estimamos finalizarlo aproximadamente a las {estimado}.",
-    whatsappMessage: "Hola {cliente}. Tu pedido #{pedido} de la lavandería ya está listo para retirar. Te esperamos hasta las 19:00. Gracias.",
-    whatsappRetiredMessage: "Hola {cliente}. Dejamos constancia de que el pedido #{pedido} fue retirado el {fecha}. Muchas gracias.",
-    whatsappRetiredPaidMessage: "Hola {cliente}. Dejamos constancia de que el pedido #{pedido} fue retirado y abonado el {fecha}. Muchas gracias.",
+    whatsappReceivedMessage: "Hola {cliente}. Recibimos tu pedido {pedido}. {pago}. Te avisamos cuando esté listo. Gracias.",
+    whatsappMessage: "Hola {cliente}. Tu pedido {pedido} ya está listo para retirar. {pago}. Te esperamos.",
+    whatsappRetiredMessage: "Hola {cliente}. Dejamos constancia de que retiró su pedido {pedido} el {fecha}. {pago}. Muchas gracias.",
     storageNoticeDays: 30,
     storageNoticeText: "Condiciones de guarda: conforme las condiciones informadas al momento de recepción y el deber de información clara previsto por la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días corridos desde el aviso de disponibilidad podrán generar cargos de guarda y/o ser derivados a donación previa comunicación fehaciente al cliente. Texto sujeto a validación legal local.",
     cashPin: "1234",
@@ -78,12 +76,11 @@ function loadState() {
 
   merged.clients = merged.clients.map((client) => ({ authorizedPickups: "", ...client }));
 
-  merged.orders = merged.orders.map((order) => ({
-    ...order,
-    paymentStatus: order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente"),
-    paymentMethod: order.paymentMethod || "Efectivo",
-    cycles: order.cycles || [],
-  }));
+  merged.orders = merged.orders.map((order) => {
+    const paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
+    const status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
+    return { ...order, status, paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [] };
+  });
 
   return merged;
 }
@@ -147,7 +144,7 @@ function escapeHtml(value) {
 function availableLocations(currentOrderId = null) {
   const busy = new Set(
     state.orders
-      .filter((order) => order.id !== Number(currentOrderId) && order.location && !["Retirado", "Abonado"].includes(order.status))
+      .filter((order) => order.id !== Number(currentOrderId) && order.location && order.status !== "Retirado")
       .map((order) => order.location),
   );
   return state.locations.filter((location) => !busy.has(location.code));
@@ -210,16 +207,17 @@ function monthlyCashSummary() {
 function messageForOrder(order, type) {
   const templates = {
     received: state.settings.whatsappReceivedMessage,
-    working: state.settings.whatsappWorkingMessage,
     ready: state.settings.whatsappMessage,
     retired: state.settings.whatsappRetiredMessage,
-    retiredPaid: state.settings.whatsappRetiredPaidMessage,
   };
+  const isPaid = order.paymentStatus === "Abonado";
+  const paymentText = isPaid ? `Ya figura pago por ${order.paymentMethod || "medio registrado"}.` : `Queda pendiente de pago ${money(order.total)}.`;
   return templates[type]
     .replaceAll("{cliente}", orderClient(order))
-    .replaceAll("{pedido}", order.number)
+    .replaceAll("{pedido}", order.number || order.location || "")
     .replaceAll("{fecha}", formatDateTime(new Date().toISOString()))
     .replaceAll("{estimado}", formatDateTime(order.estimate))
+    .replaceAll("{pago}", paymentText)
     .replaceAll("{total}", money(order.total));
 }
 
@@ -250,14 +248,17 @@ document.addEventListener("click", (event) => {
     newOrder: openOrderModal,
     newClient: openClientModal,
     editClient: () => openClientModal(id),
-    editOrderStatus: () => openOrderStatusModal(id),
+    editOrderStatus: () => openOrderEditModal(id),
+    orderState: () => openOrderStateModal(id),
+    dashboardTab: () => setDashboardTab(event.target.dataset.tab),
+    clearOrderDate: clearOrderDate,
     whatsapp: () => openWhatsappMenu(id),
     storageNotice: () => openStorageNoticeModal(id),
     openStorageOrder: () => openStorageOrder(id),
     prevWeek: () => moveScheduleWeek(-7),
     nextWeek: () => moveScheduleWeek(7),
     todayWeek: () => setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)),
-    simulateSchedule: openScheduleSimulator,
+
     sendWhatsapp: () => sendWhatsapp(id, event.target.dataset.messageType),
     copyNotice: copyVisibleNotice,
     sendStorageNotice: () => sendStorageNotice(id),
@@ -275,7 +276,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("input", (event) => {
-  if (event.target.matches("[data-search-orders]")) filterOrders(event.target.value);
+  if (event.target.matches("[data-search-orders], [data-order-date]")) applyOrderFilters();
 });
 
 document.addEventListener("change", (event) => {
@@ -289,73 +290,95 @@ document.addEventListener("change", (event) => {
   if (priceInput && selected?.dataset.price) priceInput.value = selected.dataset.price;
 });
 
+let dashboardTab = "Pendiente";
+
+function orderGroup(order) {
+  if (order.status === "Retirado") return "Retirado";
+  if (order.status === "Listo") return "Listo";
+  return "Pendiente";
+}
+
+function ordersByGroup(group) {
+  return state.orders.filter((order) => orderGroup(order) === group).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function setDashboardTab(tab) {
+  dashboardTab = tab;
+  renderDashboard();
+}
+
+function localDateInput(date = new Date()) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function clearOrderDate() {
+  const input = document.getElementById("orderDateFilter");
+  if (input) input.value = "";
+  applyOrderFilters();
+}
+
+function applyOrderFilters() {
+  const query = document.getElementById("orderSearch")?.value || "";
+  const date = document.getElementById("orderDateFilter")?.value || "";
+  filterOrders(query, date);
+}
+
 function renderDashboard() {
-  const ready = state.orders.filter((order) => order.status === "Listo para retirar").length;
-  const pending = state.orders.filter((order) => !["Retirado", "Abonado"].includes(order.status)).length;
-  const income = state.cash.filter((entry) => entry.type === "Ingreso").reduce((sum, entry) => sum + Number(entry.amount), 0);
-  const late = state.orders.filter((order) => order.estimate && new Date(order.estimate) < new Date() && !["Retirado", "Abonado"].includes(order.status)).length;
+  const groups = ["Pendiente", "Listo", "Retirado"];
+  const selectedOrders = ordersByGroup(dashboardTab);
   document.getElementById("dashboard").innerHTML = `
-    <div class="grid four">
-      <article class="card metric"><span>Pedidos activos</span><strong>${pending}</strong></article>
-      <article class="card metric"><span>Listos para retirar</span><strong>${ready}</strong></article>
-      <article class="card metric"><span>Atrasados</span><strong>${late}</strong></article>
-      <article class="card metric"><span>Ingresos cargados</span><strong>${money(income)}</strong></article>
-    </div>
-    <div class="card">
-      <div class="toolbar"><h2>Accesos rápidos</h2><div class="actions"><button class="primary" data-action="newOrder">+ Nuevo pedido</button><button class="secondary" data-action="newClient">+ Cliente</button></div></div>
-      <p class="notice">Pantalla pensada para uso diario: botones grandes, estados por color, búsqueda simple y WhatsApp preparado.</p>
-    </div>
-    ${ordersTable(state.orders.slice(-6).reverse(), "Últimos pedidos")}
-  `;
-}
-
-function renderOrders() {
-  document.getElementById("orders").innerHTML = `
-    <div class="card">
-      <div class="toolbar"><h2>Pedidos</h2><div class="actions"><button class="primary" data-action="newOrder">+ Nuevo pedido</button></div></div>
-      <input id="orderSearch" data-search-orders placeholder="Buscar por número, cliente, teléfono, estado o depósito" />
-    </div>
-    <div id="ordersTable">${ordersTable([...state.orders].reverse(), "Listado de pedidos")}</div>
-  `;
-}
-
-window.filterOrders = (query) => {
-  const q = query.toLowerCase();
-  const filtered = state.orders.filter((order) => `${order.number} ${orderClient(order)} ${getClient(order.clientId)?.phone || ""} ${order.status} ${order.location || ""}`.toLowerCase().includes(q));
-  document.getElementById("ordersTable").innerHTML = ordersTable(filtered.reverse(), "Resultados");
-};
-
-function ordersTable(orders, title) {
-  return `
-    <div class="card">
-      <h2>${escapeHtml(title)}</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>N°</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Estimado</th><th>Depósito</th><th>Pago</th><th>Total</th><th>Acciones</th></tr></thead>
-        <tbody>${orders.map((order) => `
-          <tr>
-            <td><strong>#${escapeHtml(order.number)}</strong></td>
-            <td>${escapeHtml(orderClient(order))}<br><small>${escapeHtml(getClient(order.clientId)?.phone || "")}</small></td>
-            <td>${escapeHtml(serviceSummary(order))}<br><small>${Number(order.valets || 0)} valet(s) · ${Number(order.packages || 1)} paquete(s)</small></td>
-            <td><span class="badge ${normalizeClass(order.status)}">${escapeHtml(order.status)}</span></td>
-            <td>${formatDateTime(order.estimate)}</td>
-            <td>${escapeHtml(order.location || "Sin asignar")}</td>
-            <td>${escapeHtml(order.paymentStatus || "Pendiente")}<br><small>${escapeHtml(order.paymentMethod || "-")}</small></td>
-            <td>${money(order.total)}</td>
-            <td class="actions"><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button></td>
-          </tr>`).join("") || `<tr><td colspan="9">No hay pedidos cargados.</td></tr>`}</tbody>
-      </table></div>
+    <div class="simple-home">
+      <div class="home-actions"><button class="primary big-action" data-action="newOrder">+ Nuevo pedido</button><button class="secondary big-action" data-action="newClient">+ Nuevo cliente</button></div>
+      <div class="tabs">${groups.map((group) => `<button class="tab-button ${dashboardTab === group ? "active" : ""}" data-action="dashboardTab" data-tab="${group}">${group}<strong>${ordersByGroup(group).length}</strong></button>`).join("")}</div>
+      ${orderCards(selectedOrders, `Pedidos ${dashboardTab.toLowerCase()}s`, true)}
     </div>`;
 }
 
+function renderOrders() {
+  const today = localDateInput();
+  document.getElementById("orders").innerHTML = `
+    <div class="card section-card">
+      <div class="toolbar"><div><p class="eyebrow-dark">Operación</p><h2>Pedidos</h2></div><button class="primary" data-action="newOrder">+ Nuevo pedido</button></div>
+      <div class="filters-row"><input id="orderSearch" data-search-orders placeholder="Buscar por depósito, cliente, teléfono, estado u observaciones" /><label>Fecha<input id="orderDateFilter" data-order-date type="date" value="${today}" /></label><button class="secondary" data-action="clearOrderDate">Ver todos</button></div>
+    </div>
+    <div id="ordersTable">${orderCards(state.orders.filter((order) => dateKey(order.createdAt) === today).reverse(), "Pedidos del día", false)}</div>
+  `;
+}
+
+window.filterOrders = (query, date = "") => {
+  const q = query.toLowerCase();
+  const filtered = state.orders.filter((order) => {
+    const matchesQuery = `${order.number} ${order.location || ""} ${orderClient(order)} ${getClient(order.clientId)?.phone || ""} ${order.status} ${order.notes || ""}`.toLowerCase().includes(q);
+    const matchesDate = !date || dateKey(order.createdAt) === date;
+    return matchesQuery && matchesDate;
+  });
+  document.getElementById("ordersTable").innerHTML = orderCards(filtered.reverse(), date ? "Pedidos filtrados" : "Todos los pedidos", false);
+};
+
+function orderCards(orders, title, compact = false) {
+  return `
+    <div class="card orders-panel">
+      <h2>${escapeHtml(title)}</h2>
+      <div class="order-card-list">${orders.map((order) => `
+        <article class="order-card ${normalizeClass(orderGroup(order))}">
+          <div class="order-main"><strong class="order-code">${escapeHtml(order.number || order.location || "Sin depósito")}</strong><span class="badge ${normalizeClass(orderGroup(order))}">${escapeHtml(orderGroup(order))}</span></div>
+          <div><strong>${escapeHtml(orderClient(order))}</strong><br><small>${escapeHtml(serviceSummary(order))} · ${Number(order.valets || 0)} valet(s) · ${formatDateTime(order.estimate)}</small></div>
+          <p class="order-notes">${escapeHtml(order.notes || "Sin observaciones")}</p>
+          <div class="order-meta"><span>Pago: ${escapeHtml(order.paymentStatus || "Pendiente")}</span><span>Total: ${money(order.total)}</span></div>
+          <div class="actions"><button class="secondary" data-action="orderState" data-id="${order.id}">Estado</button><button class="secondary" data-action="editOrderStatus" data-id="${order.id}">Editar</button><button class="success" data-action="whatsapp" data-id="${order.id}">WhatsApp</button></div>
+        </article>`).join("") || `<p class="notice">No hay pedidos para mostrar.</p>`}</div>
+    </div>`;
+}
+
+function ordersTable(orders, title) {
+  return orderCards(orders, title, false);
+}
 
 function renderClients() {
   document.getElementById("clients").innerHTML = `
     <div class="card section-card">
       <div class="toolbar"><div><p class="eyebrow-dark">Personas</p><h2>Clientes</h2></div><button class="primary" data-action="newClient">+ Nuevo cliente</button></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Autorizados a retirar</th><th>Dirección</th><th>Notas</th><th>Pedidos</th><th></th></tr></thead>
-        <tbody>${state.clients.map((client) => `<tr><td><strong>${escapeHtml(client.name)}</strong></td><td>${escapeHtml(client.phone)}</td><td>${escapeHtml(client.authorizedPickups || "Solo titular")}</td><td>${escapeHtml(client.address || "-")}</td><td>${escapeHtml(client.notes || "-")}</td><td>${state.orders.filter((order) => order.clientId === client.id).length}</td><td><button class="secondary" data-action="editClient" data-id="${client.id}">Editar</button></td></tr>`).join("")}</tbody>
-      </table></div>
+      <div class="client-card-grid">${state.clients.map((client) => `<article class="client-card"><div class="client-avatar">👤</div><h3>${escapeHtml(client.name)}</h3><p><strong>Tel:</strong> ${escapeHtml(client.phone)}</p><p><strong>Retira:</strong> ${escapeHtml(client.authorizedPickups || "Solo titular")}</p><p><strong>Notas:</strong> ${escapeHtml(client.notes || "-")}</p><button class="secondary" data-action="editClient" data-id="${client.id}">Editar cliente</button></article>`).join("")}</div>
     </div>`;
 }
 
@@ -366,7 +389,7 @@ function renderSchedule() {
     ...LaundryScheduler.machineNames("Secado", state.settings.dryers).map((name) => ({ type: "Secado", name })),
   ];
   const activeCycles = state.orders
-    .filter((order) => !["Retirado", "Abonado"].includes(order.status))
+    .filter((order) => order.status !== "Retirado")
     .flatMap((order) => (order.cycles || []).map((cycle) => ({ ...cycle, order })))
     .filter((cycle) => cycle.type !== "Preparación")
     .sort((a, b) => new Date(a.start) - new Date(b.start));
@@ -379,7 +402,7 @@ function renderSchedule() {
 
   document.getElementById("schedule").innerHTML = `
     <div class="card hero-card"><div><p class="eyebrow-dark">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>${weekDays[0].toLocaleDateString("es-AR")}</strong>. Un valet lavado + secado ocupa aprox. <strong>${washDryMinutes} minutos</strong>, pero la estimación real depende de máquinas libres.</p></div><div class="status-pill light">${state.settings.smallWashers} lavarropas · ${state.settings.dryers} secadoras</div></div>
-    <div class="card"><div class="toolbar"><h3>Controles de agenda</h3><div class="actions"><button class="secondary" data-action="prevWeek">← Semana anterior</button><input class="week-input" type="date" data-schedule-week value="${scheduleWeekStart}" /><button class="secondary" data-action="todayWeek">Semana actual</button><button class="secondary" data-action="nextWeek">Semana siguiente →</button><button class="primary" data-action="simulateSchedule">Simular demora</button></div></div>${preview}</div>
+    <div class="card"><div class="toolbar"><h3>Controles de agenda</h3><div class="actions"><button class="secondary" data-action="prevWeek">← Semana anterior</button><input class="week-input" type="date" data-schedule-week value="${scheduleWeekStart}" /><button class="secondary" data-action="todayWeek">Semana actual</button><button class="secondary" data-action="nextWeek">Semana siguiente →</button></div></div>${preview}</div>
     <div class="card schedule-card"><h3>Semana seleccionada</h3><div class="timeline-grid" style="--days:${weekDays.length}">
       <div class="timeline-head">Hora</div>${weekDays.map((day) => `<div class="timeline-head">${day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" })}</div>`).join("")}
       ${hours.map((hour) => `<div class="timeline-hour">${hourLabel(hour)}</div>${weekDays.map((day) => {
@@ -387,9 +410,9 @@ function renderSchedule() {
         return `<div class="timeline-cell">${cycles.map((cycle) => `<div class="timeline-event ${cycle.type === "Lavado" ? "wash" : "dry"}"><strong>${escapeHtml(orderClient(cycle.order))}</strong><span>${escapeHtml(cycle.type)} · ${escapeHtml(cycle.machine)}</span><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<span class="free-text">Libre</span>`}</div>`;
       }).join("")}`).join("")}
     </div></div>
-    <div class="card"><h3>Máquinas</h3><div class="machine-board">${machines.map((machine) => {
+    <div class="card"><h3 class="machine-section-title">Lavadoras y secadoras</h3><div class="machine-board">${machines.map((machine) => {
       const assigned = activeCycles.filter((cycle) => cycle.machine === machine.name).slice(0, 8);
-      return `<article class="machine"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${machine.type === "Lavado" ? "en-lavado" : "en-secado"}">${machine.type}</span>${assigned.map((cycle) => `<div class="slot"><strong>#${escapeHtml(cycle.order.number)}</strong> ${escapeHtml(orderClient(cycle.order))}<br><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<div class="slot">Libre</div>`}</article>`;
+      return `<article class="machine type-${normalizeClass(machine.type)}"><h4>${escapeHtml(machine.name)}</h4><span class="badge ${machine.type === "Lavado" ? "en-lavado" : "en-secado"}">${machine.type}</span>${assigned.map((cycle) => `<div class="slot"><strong>#${escapeHtml(cycle.order.number)}</strong> ${escapeHtml(orderClient(cycle.order))}<br><small>${formatDateTime(cycle.start)} → ${formatDateTime(cycle.end)}</small></div>`).join("") || `<div class="slot">Libre</div>`}</article>`;
     }).join("")}</div></div>`;
 }
 
@@ -404,28 +427,8 @@ function moveScheduleWeek(days) {
   setScheduleWeek(next.toISOString().slice(0, 10));
 }
 
-function openScheduleSimulator() {
-  const now = new Date();
-  const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  openModal("Simular demora", `<form class="form-grid">
-    <label>Cliente de referencia<input name="client" value="Cliente mostrador" /></label>
-    <label>Servicio<select name="serviceId">${state.services.map((service) => `<option value="${service.id}">${escapeHtml(service.name)}</option>`).join("")}</select></label>
-    <label>Fecha y hora de ingreso<input name="start" type="datetime-local" value="${localNow}" /></label>
-    <label class="full">Usa pedidos ya cargados y máquinas configuradas para estimar cuánto tardaría.</label>
-    <button class="primary full">Calcular demora</button>
-  </form>`, (form) => {
-    const data = Object.fromEntries(form.entries());
-    const service = getService(data.serviceId);
-    const schedule = LaundryScheduler.scheduleOrder(state.orders, service, state.settings, new Date(data.start).toISOString());
-    schedulePreview = { client: data.client || "Cliente mostrador", service: service.name, start: new Date(data.start).toISOString(), end: schedule.estimate, minutes: Math.max(0, Math.round((new Date(schedule.estimate) - new Date(data.start)) / 60000)) };
-    setScheduleWeek(data.start.slice(0, 10));
-    closeModal();
-  });
-}
-
-
 function renderStorage() {
-  const occupied = new Map(state.orders.filter((order) => order.location && !["Retirado", "Abonado"].includes(order.status)).map((order) => [order.location, order]));
+  const occupied = new Map(state.orders.filter((order) => order.location && order.status !== "Retirado").map((order) => [order.location, order]));
   document.getElementById("storage").innerHTML = `
     <div class="card hero-card"><div><p class="eyebrow-dark">Depósito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hacé clic en una ubicación ocupada para abrir el pedido correspondiente.</p></div><button class="secondary" data-action="storageNotice">Ver aviso general</button></div>
     <div class="notice legal-note"><strong>Aviso informativo:</strong> El texto de guarda es configurable y debe comunicarse de forma clara al recibir el pedido. Validar plazo y redacción final con asesoría local.</div>
@@ -445,7 +448,7 @@ function openStorageOrder(id) {
     input.value = order.number;
     filterOrders(order.number);
   }
-  openOrderStatusModal(id);
+  openOrderEditModal(id);
 }
 
 
@@ -453,7 +456,7 @@ function cashReportHtml() {
   const rows = monthlyCashSummary();
   const latest = rows.at(-1) || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
   return `
-    <div class="card report-panel"><div class="toolbar"><div><p class="eyebrow-dark">Reportes de caja</p><h2>Comparación mes a mes</h2></div><span class="status-pill light">Separado de la caja diaria</span></div>
+    <div class="card report-panel cash-report-section"><div class="toolbar"><div><p class="eyebrow-dark">Reportes de caja</p><h2>Comparación mes a mes</h2></div><span class="status-pill light">Separado de la caja diaria</span></div>
       <div class="grid four report-metrics">
         <article class="mini-metric"><span>Ingresos mes</span><strong>${money(latest.income)}</strong></article>
         <article class="mini-metric"><span>Egresos mes</span><strong>${money(latest.expense)}</strong></article>
@@ -479,7 +482,7 @@ function renderCash() {
   const transfer = state.cash.filter((entry) => entry.method === "Transferencia").reduce((sum, entry) => sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)), 0);
   document.getElementById("cash").innerHTML = `
     <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>${money(income)}</strong></article><article class="card metric"><span>Egresos</span><strong>${money(expense)}</strong></article><article class="card metric"><span>Efectivo</span><strong>${money(cash)}</strong></article><article class="card metric"><span>Transferencia</span><strong>${money(transfer)}</strong></article></div>
-    <div class="card"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>
+    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button></div></div>${cashTable()}</div>
     ${cashReportHtml()}`;
 }
 
@@ -499,10 +502,8 @@ function renderSettings() {
       <label>Minutos secado<input id="dryingMinutes" type="number" min="1" value="${Number(state.settings.dryingMinutes)}" /></label>
       <label>Clave de caja<input id="cashPin" type="password" value="${escapeHtml(state.settings.cashPin)}" /></label>
       <label class="full">WhatsApp pedido recibido<textarea id="whatsappReceivedMessage">${escapeHtml(state.settings.whatsappReceivedMessage)}</textarea></label>
-      <label class="full">WhatsApp pedido en proceso<textarea id="whatsappWorkingMessage">${escapeHtml(state.settings.whatsappWorkingMessage)}</textarea></label>
       <label class="full">WhatsApp pedido listo<textarea id="whatsappMessage">${escapeHtml(state.settings.whatsappMessage)}</textarea></label>
       <label class="full">WhatsApp retirado<textarea id="whatsappRetiredMessage">${escapeHtml(state.settings.whatsappRetiredMessage)}</textarea></label>
-      <label class="full">WhatsApp retirado y abonado<textarea id="whatsappRetiredPaidMessage">${escapeHtml(state.settings.whatsappRetiredPaidMessage)}</textarea></label>
       <label>Días para aviso depósito<input id="storageNoticeDays" type="number" min="1" value="${Number(state.settings.storageNoticeDays)}" /></label>
       <label class="full">Cartel de depósito<textarea id="storageNoticeText">${escapeHtml(state.settings.storageNoticeText)}</textarea></label>
     </div><br><div class="actions"><button class="primary" data-action="saveSettings">Guardar</button><button class="danger" data-action="resetDemo">Reiniciar demo</button></div></div>`;
@@ -551,7 +552,8 @@ function openOrderModal() {
     const createdAt = new Date().toISOString();
     const service = getService(data.serviceId);
     const schedule = createOrderSchedule(service, createdAt);
-    const order = { id: nextId(state.orders), number: nextOrderNumber(), clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Recibido", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location: data.location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+    const location = data.location || `P${nextOrderNumber()}`;
+    const order = { id: nextId(state.orders), number: location, clientId: Number(data.clientId), serviceId: Number(data.serviceId), createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", valets: Number(data.valets), packages: Number(data.packages), total: Number(data.total), location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
     state.orders.push(order);
     if (order.paymentStatus === "Abonado") syncOrderPayment(order);
     saveState(); closeModal(); setView("orders");
@@ -563,23 +565,24 @@ function syncOrderPayment(order) {
   const existing = state.cash.find((entry) => entry.orderId === order.id && entry.category === "Pedido");
   if (order.paymentStatus !== "Abonado") {
     state.cash = state.cash.filter((entry) => !(entry.orderId === order.id && entry.category === "Pedido"));
+    order.paymentSynced = false;
     return;
   }
 
   const payment = { type: "Ingreso", category: "Pedido", description: `Cobro pedido #${order.number}`, method: order.paymentMethod || "Efectivo", amount: order.total, orderId: order.id };
   if (existing) Object.assign(existing, payment);
   else state.cash.push({ id: nextId(state.cash), date: new Date().toISOString(), ...payment });
+  order.paymentSynced = true;
 }
 
-function openOrderStatusModal(id) {
+function openOrderEditModal(id) {
   const order = getOrder(id);
   if (!order) return;
   const locations = availableLocations(order.id);
   if (order.location && !locations.some((location) => location.code === order.location)) locations.unshift({ id: 0, code: order.location });
 
-  openModal(`Editar pedido #${escapeHtml(order.number)}`, `<form class="form-grid">
-    <label>Estado<select name="status">${STATES.map((status) => `<option ${status === order.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
-    <label>Ubicación depósito<select name="location"><option value="">Sin asignar</option>${locations.map((location) => `<option ${location.code === order.location ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
+  openModal(`Editar pedido ${escapeHtml(order.number)}`, `<form class="form-grid">
+    <label>Depósito / número<select name="location"><option value="">Sin asignar</option>${locations.map((location) => `<option ${location.code === order.location ? "selected" : ""}>${escapeHtml(location.code)}</option>`).join("")}</select></label>
     <label>Pago<select name="paymentStatus"><option ${order.paymentStatus !== "Abonado" ? "selected" : ""}>Pendiente</option><option ${order.paymentStatus === "Abonado" ? "selected" : ""}>Abonado</option></select></label>
     <label>Medio de pago<select name="paymentMethod"><option ${order.paymentMethod !== "Transferencia" ? "selected" : ""}>Efectivo</option><option ${order.paymentMethod === "Transferencia" ? "selected" : ""}>Transferencia</option></select></label>
     <label>Precio total<input name="total" type="number" min="0" value="${Number(order.total || 0)}" /></label>
@@ -587,14 +590,28 @@ function openOrderStatusModal(id) {
     <button class="primary full">Guardar cambios</button>
   </form>`, (form) => {
     const data = Object.fromEntries(form.entries());
-    order.status = data.status;
-    order.location = ["Retirado", "Abonado"].includes(order.status) ? "" : data.location;
+    order.location = data.location;
+    order.number = data.location || order.number;
     order.paymentStatus = data.paymentStatus;
     order.paymentMethod = data.paymentMethod;
     order.total = Number(data.total);
     order.notes = data.notes;
-    if (order.paymentStatus === "Abonado" || order.status === "Abonado") order.paymentStatus = "Abonado";
+    if (order.paymentStatus === "Abonado") order.paymentStatus = "Abonado";
     syncOrderPayment(order);
+    saveState(); closeModal(); render();
+  });
+}
+
+function openOrderStateModal(id) {
+  const order = getOrder(id);
+  if (!order) return;
+  openModal(`Cambiar estado ${escapeHtml(order.number)}`, `<form class="state-grid">
+    ${STATES.map((status) => `<label class="state-option ${status === order.status ? "selected" : ""}"><input type="radio" name="status" value="${status}" ${status === order.status ? "checked" : ""} /> <span>${status}</span></label>`).join("")}
+    <button class="primary full">Guardar estado</button>
+  </form>`, (form) => {
+    const data = Object.fromEntries(form.entries());
+    order.status = data.status;
+    if (order.status === "Retirado") order.location = "";
     saveState(); closeModal(); render();
   });
 }
@@ -616,12 +633,10 @@ function openWhatsappMenu(id) {
   if (!order) return;
   openModal(`Mensajes WhatsApp #${escapeHtml(order.number)}`, `
     <div class="message-list">
-      <button class="secondary" data-action="sendWhatsapp" data-message-type="received" data-id="${order.id}">Avisar recibido</button>
-      <button class="secondary" data-action="sendWhatsapp" data-message-type="working" data-id="${order.id}">Avisar en proceso</button>
-      <button class="success" data-action="sendWhatsapp" data-message-type="ready" data-id="${order.id}">Avisar que está listo</button>
-      <button class="secondary" data-action="sendWhatsapp" data-message-type="retired" data-id="${order.id}">Constancia de retirado</button>
-      <button class="secondary" data-action="sendWhatsapp" data-message-type="retiredPaid" data-id="${order.id}">Constancia retirado y abonado</button>
-      <div class="copy-row"><button class="secondary" data-action="copyWhatsapp" data-message-type="received" data-id="${order.id}">Copiar recibido</button><button class="secondary" data-action="copyWhatsapp" data-message-type="working" data-id="${order.id}">Copiar en proceso</button><button class="secondary" data-action="copyWhatsapp" data-message-type="ready" data-id="${order.id}">Copiar listo</button></div>
+      <button class="secondary" data-action="sendWhatsapp" data-message-type="received" data-id="${order.id}">Recibimos tu pedido</button>
+      <button class="success" data-action="sendWhatsapp" data-message-type="ready" data-id="${order.id}">Tu pedido está listo</button>
+      <button class="secondary" data-action="sendWhatsapp" data-message-type="retired" data-id="${order.id}">Retiró su pedido</button>
+      <div class="copy-row"><button class="secondary" data-action="copyWhatsapp" data-message-type="received" data-id="${order.id}">Copiar recibido</button><button class="secondary" data-action="copyWhatsapp" data-message-type="ready" data-id="${order.id}">Copiar listo</button><button class="secondary" data-action="copyWhatsapp" data-message-type="retired" data-id="${order.id}">Copiar retirado</button></div>
       <textarea readonly>${escapeHtml(messageForOrder(order, "ready"))}</textarea>
     </div>`);
 }
@@ -671,7 +686,7 @@ function openCashModal(type) {
 
 
 function saveSettings() {
-  ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappWorkingMessage", "whatsappMessage", "whatsappRetiredMessage", "whatsappRetiredPaidMessage", "storageNoticeText", "cashPin"].forEach((key) => state.settings[key] = document.getElementById(key).value);
+  ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappMessage", "whatsappRetiredMessage", "storageNoticeText", "cashPin"].forEach((key) => state.settings[key] = document.getElementById(key).value);
   ["smallWashers", "dryers", "washingMinutes", "dryingMinutes", "storageNoticeDays"].forEach((key) => state.settings[key] = Number(document.getElementById(key).value));
   saveState(); render();
 }

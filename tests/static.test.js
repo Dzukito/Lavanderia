@@ -14,7 +14,9 @@ for (const feature of [
   'escapeHtml',
   'availableLocations',
   'createOrderSchedule',
-  'openOrderStatusModal',
+  'openOrderEditModal',
+  'openOrderStateModal',
+  'orderCards',
   'syncOrderPayment',
   'openWhatsappMenu',
   'sendWhatsapp',
@@ -23,8 +25,7 @@ for (const feature of [
   'cashReportHtml',
   'currentWeekDays',
   'setScheduleWeek',
-  'openScheduleSimulator',
-  'openStorageOrder',
+    'openStorageOrder',
   'authorizedPickups',
 ]) {
   assert.match(app, new RegExp(feature), `missing app feature ${feature}`);
@@ -33,11 +34,12 @@ for (const feature of [
 assert.doesNotMatch(app, /oninput=/, 'orders search should use delegated events instead of inline handlers');
 assert.doesNotMatch(app, /onclick=/, 'modals should use delegated actions instead of inline handlers');
 assert.match(app, /paymentStatus/, 'orders should track payment status');
+assert.match(app, /const STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
-assert.match(app, /whatsappWorkingMessage/, 'WhatsApp should include working notification');
-assert.match(app, /whatsappRetiredPaidMessage/, 'WhatsApp should include retired and paid acknowledgement');
+assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
+assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 

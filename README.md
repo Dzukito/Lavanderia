@@ -20,14 +20,14 @@ Luego abrir `http://localhost:8080`.
 ## Funciones incluidas
 
 - Clientes con nombre, teléfono, dirección, notas, historial de pedidos y personas autorizadas a retirar.
-- Pedidos con número automático, servicio, cantidad de valets, paquetes, estado, horario estimado, precio, estado de pago, medio de pago y ubicación de depósito.
+- Pedidos con código visible igual al depósito asignado, servicio, valets, paquetes, estado simple, horario estimado, precio, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
-- Estados del pedido: recibido, en lavado, en secado, listo para retirar, retirado y abonado.
-- Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y simulador manual de demora según máquinas disponibles.
+- Estados simplificados del pedido: pendiente, listo y retirado.
+- Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.
 - Asignación de ciclos por disponibilidad real de lavarropas/secadoras, evitando superponer pedidos en una misma máquina.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
 - Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido y cartel/aviso configurable para pedidos no retirados.
-- Avisos al cliente por WhatsApp Web desde un único menú: pedido recibido, pedido en proceso, pedido listo, constancia de retirado, constancia de retirado y abonado, o copia manual del mensaje.
+- Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
 - Caja protegida con clave inicial `1234`, editable desde configuración, ingresos, egresos, efectivo y transferencia; al marcar un pedido como abonado se genera el ingreso correspondiente.
 - Gastos por categorías como agua, luz, gas, insumos, alquiler y otros servicios.
 - Reportes de caja integrados dentro de **Caja**, con tarjetas y comparación mes a mes de ingresos, egresos, saldo, efectivo y transferencia.
@@ -38,10 +38,10 @@ Luego abrir `http://localhost:8080`.
 1. Cargar o buscar cliente.
 2. Crear pedido desde **Nuevo pedido**.
 3. Elegir servicio, valets, paquetes, precio y ubicación de depósito si ya se conoce.
-4. Editar estado, depósito, pago y medio de pago desde el botón **Editar** del pedido.
-5. Usar **WhatsApp** para elegir entre aviso de recibido, en proceso, listo, constancia de retirado o constancia de retirado y abonado.
-6. Al retirar, avanzar a **Retirado** y luego **Abonado**.
-7. Revisar caja con la clave del dueño; la comparación mensual está dentro de la misma sección, separada de los movimientos diarios.
+4. Cambiar el estado con el botón **Estado** y editar datos de pago/observaciones con **Editar**.
+5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
+6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.
+7. Revisar caja con la clave del dueño; la caja del día queda separada de la comparación mensual.
 
 ## Aviso legal de depósito
 
