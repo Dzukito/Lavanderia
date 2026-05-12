@@ -11,6 +11,7 @@ for (const section of ['Pedidos', 'Clientes', 'Turnos', 'Depósito', 'Caja', 'M�
   assert.match(html, new RegExp(section), `missing navigation section ${section}`);
 }
 assert.doesNotMatch(html, /data-view="reports"/, 'reports should live inside Caja instead of a separate nav item');
+assert.match(html, /La Vieja Esquina/, 'header should show laundry name');
 
 for (const feature of [
   'escapeHtml',
@@ -81,17 +82,19 @@ assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks s
 assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignment');
 assert.match(app, /wasPaidBeforeRetired/, 'retired state should remember previous payment status');
 assert.match(app, /orderItemsHtml/, 'orders should render itemized garments with prices');
+assert.doesNotMatch(app, /escapeHtml\(itemSummary\(order\)\).*formatDateTime/, 'order header should not duplicate item summary above item list');
 assert.match(app, /metricInsight/, 'metrics should expose monthly insights');
 assert.match(app, /pie-chart|pieStyle|topClient|topService|topHour/, 'metrics should include pie charts and client/service/hour insights');
 assert.doesNotMatch(app, /Insights para el dueño/, 'metrics should not show the owner insights banner');
-assert.match(app, /Ticket promedio|Medio fuerte|metrics-month-grid/, 'metrics should include monthly comparison insights');
+assert.match(app, /Métricas protegidas|cashReports[\s\S]*cashUnlocked/, 'metrics should require PIN');
+assert.match(app, /metric-score-grid|client-bar|service-bar|hour-bar/, 'metrics should use improved graphical score cards');
 assert.doesNotMatch(app, /💵|🏦/, 'payment method labels should not include emoji icons');
 assert.match(app, /copyWhatsapp[\s\S]*copy-status/, 'WhatsApp copy buttons should show copied feedback');
 assert.match(app, /cash-income-row|cash-expense-row|Saldo final/, 'cash table should group income and expense with totals');
 assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
 assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
-assert.match(app, /if \(view === "cash"\)[\s\S]{0,40}cashUnlocked = false/, 'cash view should request PIN every time');
+assert.match(app, /if \(view === "cash" \|\| view === "cashReports"\)[\s\S]{0,80}cashUnlocked = false/, 'cash and metrics views should request PIN every time');
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 

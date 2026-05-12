@@ -285,3 +285,11 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .cash-type-badge.income { background: #d3f9d8; color: #2b8a3e; }
 .cash-type-badge.expense { background: #ffe3e3; color: #c92a2a; }
 .cash-movements-table tfoot th { background: #eef4ff; font-size: 16px; }
+.metric-bars .client-bar { background: #20c997; }
+.metric-bars .service-bar { background: #f59f00; }
+.metric-bars .hour-bar { background: #15aabf; }
+.metric-score-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+.metric-score-grid span { background: #f8fbff; border-radius: 12px; color: var(--muted); display: grid; font-size: 12px; font-weight: 800; padding: 9px; }
+.metric-score-grid strong { color: var(--text); font-size: 15px; }
+.client-card .success { background: #2f9e44; border-color: #2f9e44; color: #fff; }
+.client-card .primary { background: var(--primary); border-color: var(--primary); color: #fff; }
