@@ -160,6 +160,7 @@ var cashUnlocked = false;
 var selectedMachine = null;
 var scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
 var schedulePreview = null;
+var selectedMetricsMonth = "";
 function mergeLocations(defaultLocations, savedLocations) {
     if (savedLocations === void 0) { savedLocations = []; }
     var result = [];
@@ -307,6 +308,21 @@ function allCashEntries() {
     });
     return __spreadArray(__spreadArray([], state.cash || [], true), archived, true);
 }
+function topMetrics(values, limit) {
+    var list = [];
+    for (var key in values) {
+        if (Object.prototype.hasOwnProperty.call(values, key))
+            list.push(values[key]);
+    }
+    list.sort(function (a, b) { return b.count - a.count; });
+    return list.slice(0, limit || 3);
+}
+function emptyHourlyCounts() {
+    var hours = [];
+    for (var hour = 0; hour < 24; hour += 1)
+        hours.push({ hour: hour, label: String(hour).padStart(2, "0") + ":00", count: 0 });
+    return hours;
+}
 function monthlyCashSummary() {
     var summary = {};
     allCashEntries().forEach(function (entry) {
@@ -323,6 +339,11 @@ function monthlyCashSummary() {
         if (entry.method === "Transferencia")
             summary[key].transfer += entry.type === "Ingreso" ? amount : -amount;
     });
+    state.orders.forEach(function (order) {
+        var orderMonth = monthKey(order.createdAt);
+        if (!summary[orderMonth])
+            summary[orderMonth] = { income: 0, expense: 0, cash: 0, transfer: 0 };
+    });
     var months = [];
     for (var month in summary) {
         if (Object.prototype.hasOwnProperty.call(summary, month))
@@ -336,59 +357,59 @@ function monthlyCashSummary() {
         var previous = previousValues ? previousValues.income - previousValues.expense : null;
         var diff = previous ? Math.round(((balance - previous) / Math.abs(previous)) * 100) : null;
         var monthOrders = state.orders.filter(function (order) { return monthKey(order.createdAt) === month; });
+        var hourlyCounts = emptyHourlyCounts();
+        var clients = {};
+        monthOrders.forEach(function (order) {
+            var client = getClient(order.clientId);
+            var clientKey = String(order.clientId || orderClient(order));
+            if (!clients[clientKey])
+                clients[clientKey] = { id: order.clientId, name: client ? client.name : orderClient(order), count: 0 };
+            clients[clientKey].count += 1;
+            var hour = new Date(order.createdAt).getHours();
+            if (hourlyCounts[hour])
+                hourlyCounts[hour].count += 1;
+        });
         var orderTotal = monthOrders.reduce(function (sum, order) { return sum + Number(order.total || 0); }, 0);
         var averageTicket = monthOrders.length ? Math.round(orderTotal / monthOrders.length) : 0;
         var margin = values.income ? Math.round((balance / values.income) * 100) : 0;
-        var topMethod = Math.abs(values.transfer) > Math.abs(values.cash) ? "Transferencia" : "Efectivo";
-        var services = {};
-        var clients = {};
-        var hours = {};
-        monthOrders.forEach(function (order) {
-            var clientName = orderClient(order);
-            clients[clientName] = (clients[clientName] || 0) + 1;
-            var hour = new Date(order.createdAt).getHours();
-            var hourText = String(hour).padStart(2, "0") + ":00";
-            hours[hourText] = (hours[hourText] || 0) + 1;
-            (order.items || []).forEach(function (item) {
-                var serviceName = item.serviceName || serviceSummary(order);
-                services[serviceName] = (services[serviceName] || 0) + Number(item.quantity || 1);
-            });
-        });
-        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff, orders: monthOrders.length, orderTotal: orderTotal, averageTicket: averageTicket, topMethod: topMethod, topClient: topMetric(clients), topService: topMetric(services), topHour: topMetric(hours), margin: margin });
+        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff, orders: monthOrders.length, orderTotal: orderTotal, averageTicket: averageTicket, margin: margin, topClients: topMetrics(clients, 3), hourlyCounts: hourlyCounts });
     });
 }
-function metricInsight(row) {
-    if (!row.income && !row.expense)
-        return "Sin movimientos todavía.";
-    if (row.diff === null)
-        return "Primer mes con datos para comparar.";
-    if (row.diff > 0)
-        return "El saldo mejoró " + row.diff + "% contra el mes anterior.";
-    if (row.diff < 0)
-        return "El saldo bajó " + Math.abs(row.diff) + "%: revisar egresos y tickets.";
-    return "Saldo estable frente al mes anterior.";
+function signedCashAmount(entry) {
+    var amount = Number(entry.amount || 0);
+    return entry.type === "Egreso" ? -Math.abs(amount) : amount;
 }
-function metricAdvice(row) {
-    if (!row.orders)
-        return "Cargá pedidos para detectar clientes, servicios y horarios fuertes.";
-    if (row.margin < 35)
-        return "Margen ajustado: conviene revisar egresos o precios de los servicios más pedidos.";
-    if (row.topHour.count >= 3)
-        return "Hora pico detectada: prepará personal o máquinas cerca de " + row.topHour.name + ".";
-    return "Buen mes para fidelizar a " + row.topClient.name + " y repetir el servicio " + row.topService.name + ".";
+function moneySigned(value) {
+    var amount = Number(value || 0);
+    return amount < 0 ? "-" + money(Math.abs(amount)) : money(amount);
 }
-function topMetric(values) {
-    var best = { name: "Sin datos", count: 0 };
-    for (var key in values) {
-        if (Object.prototype.hasOwnProperty.call(values, key) && values[key] > best.count)
-            best = { name: key, count: values[key] };
-    }
-    return best;
+function historicalCashRows() {
+    var rows = [];
+    (state.cashHistory || []).forEach(function (day) {
+        (day.entries || []).forEach(function (entry) {
+            rows.push(__assign({ closedAt: day.closedAt }, entry));
+        });
+    });
+    rows.sort(function (a, b) { return new Date(b.closedAt || b.date) - new Date(a.closedAt || a.date); });
+    return rows;
 }
-function pieStyle(primary, secondary) {
-    var total = Math.abs(primary) + Math.abs(secondary);
-    var percent = total ? Math.round((Math.abs(primary) / total) * 100) : 50;
-    return "background: conic-gradient(#2f6bff 0 " + percent + "%, #ff6b6b " + percent + "% 100%)";
+function historicalCashHtml() {
+    var rows = historicalCashRows();
+    return '<details class="historical-cash-panel"><summary class="secondary history-toggle">Ver caja histórica</summary><div class="toolbar compact-toolbar"><h3>Caja histórica archivada</h3><button class="secondary" data-action="exportHistoricalCash">Exportar Excel histórico</button></div><div class="table-wrap"><table class="cash-history-table"><thead><tr><th>Cierre</th><th>Movimiento</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(rows.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.closedAt), '</td><td>').concat(formatDateTime(entry.date), '</td><td>').concat(escapeHtml(entry.type), '</td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td class="').concat(signedCashAmount(entry) < 0 ? 'negative-amount' : '', '">').concat(moneySigned(signedCashAmount(entry)), '</td></tr>'); }).join('') || '<tr><td colspan="7">Todavía no hay cierres diarios archivados.</td></tr>', '</tbody></table></div></details>');
+}
+function orderHourLineChart(row) {
+    var counts = row.hourlyCounts || emptyHourlyCounts();
+    var max = counts.reduce(function (best, item) { return Math.max(best, item.count); }, 1);
+    var points = counts.map(function (item, index) {
+        var x = 20 + index * (560 / 23);
+        var y = 150 - (item.count / max) * 120;
+        return Math.round(x) + "," + Math.round(y);
+    }).join(" ");
+    var labels = counts.filter(function (item) { return item.count > 0; }).map(function (item, index) { return '<span><strong>'.concat(escapeHtml(item.label), '</strong>').concat(item.count, '</span>'); }).join('') || '<span>Sin pedidos en este mes.</span>';
+    return '<div class="hour-line-chart"><svg viewBox="0 0 600 180" role="img" aria-label="Pedidos por hora"><line x1="20" y1="150" x2="580" y2="150"></line><line x1="20" y1="20" x2="20" y2="150"></line><polyline points="'.concat(points, '"></polyline></svg><div class="hour-chart-labels">').concat(labels, '</div></div>');
+}
+function monthSelectorHtml(rows, selectedMonth) {
+    return '<label>Ver mes<select data-metrics-month>'.concat(rows.map(function (row) { return '<option value="'.concat(escapeHtml(row.month), '" ').concat(row.month === selectedMonth ? 'selected' : '', '>').concat(escapeHtml(row.month), '</option>'); }).join(''), '</select></label>');
 }
 function messageForOrder(order, type) {
     var templates = {
@@ -483,6 +504,11 @@ document.addEventListener("input", function (event) {
         filterClients(event.target.value);
 });
 document.addEventListener("change", function (event) {
+    if (event.target.matches("[data-metrics-month]")) {
+        selectedMetricsMonth = event.target.value;
+        renderCashReports();
+        return;
+    }
     if (event.target.matches("[data-schedule-week]")) {
         setScheduleWeek(event.target.value);
         return;
@@ -702,21 +728,15 @@ function openStorageOrder(id) {
 }
 function cashReportHtml() {
     var rows = monthlyCashSummary();
-    var latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0, orders: 0, averageTicket: 0, topMethod: "Efectivo", margin: 0, topClient: { name: "Sin datos", count: 0 }, topService: { name: "Sin datos", count: 0 }, topHour: { name: "Sin datos", count: 0 } };
+    var latest = rows[rows.length - 1] || { month: "Sin datos", income: 0, expense: 0, balance: 0, margin: 0, orders: 0, topClients: [], hourlyCounts: emptyHourlyCounts() };
+    if (!selectedMetricsMonth && rows.length)
+        selectedMetricsMonth = latest.month;
+    var selected = rows.find(function (row) { return row.month === selectedMetricsMonth; }) || latest;
     var bestBalance = rows.reduce(function (best, row) { return !best || row.balance > best.balance ? row : best; }, null);
-    return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Caja mes por mes</p><h2>Métricas interactivas</h2><p>Explorá cada mes con tortas, barras apiladas, rankings y recomendaciones prácticas.</p></div></div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos último mes</span><strong>'.concat(money(latest.income), '</strong><small>').concat(latest.diff === null ? 'Primer registro' : latest.diff + '% vs mes anterior', '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(latest.margin, '%</strong><small>Saldo sobre ingresos</small></article>\n        <article class="mini-metric metric-glow"><span>Cliente para fidelizar</span><strong>').concat(escapeHtml(latest.topClient.name), '</strong><small>').concat(latest.topClient.count, ' pedidos</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? bestBalance.month : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cargá movimientos', '</small></article>\n      </div>\n      <div class="metric-insights insight-board"><h3>Insights rápidos</h3><div class="insight-grid"><span>Idea: ').concat(escapeHtml(metricInsight(latest)), '</span><span>Objetivo: ').concat(escapeHtml(metricAdvice(latest)), '</span><span>Hora fuerte: ').concat(escapeHtml(latest.topHour.name), '</span></div></div>\n      <div class="metrics-month-grid interactive-metrics">').concat(rows.map(function (row) {
-        var maxMoney = Math.max(row.income, row.expense, 1);
-        var incomeWidth = Math.max(4, (row.income / maxMoney) * 100);
-        var expenseWidth = Math.max(4, (row.expense / maxMoney) * 100);
-        var cashTotal = Math.abs(row.cash) + Math.abs(row.transfer) || 1;
-        var cashWidth = Math.max(4, (Math.abs(row.cash) / cashTotal) * 100);
-        var transferWidth = Math.max(4, (Math.abs(row.transfer) / cashTotal) * 100);
-        var maxCounts = Math.max(row.orders, row.topClient.count, row.topService.count, row.topHour.count, 1);
-        var clientWidth = Math.max(4, (row.topClient.count / maxCounts) * 100);
-        var serviceWidth = Math.max(4, (row.topService.count / maxCounts) * 100);
-        var hourWidth = Math.max(4, (row.topHour.count / maxCounts) * 100);
-        return '<details class="metric-month-card interactive-card" open><summary class="metric-month-head"><h3>'.concat(row.month, '</h3><span>').concat(row.diff === null ? 'Sin comparativo' : row.diff + '% vs anterior', '</span></summary><div class="pie-row"><div class="pie-chart fancy-pie" style="').concat(pieStyle(row.income, row.expense), '"><span>Ingresos/Egresos</span></div><div class="pie-chart payment-pie fancy-pie" style="').concat(pieStyle(row.cash, row.transfer), '"><span>Efectivo/Transf.</span></div></div><div class="stacked-bar"><span class="cash-stack" style="width:').concat(cashWidth, '%"></span><span class="transfer-stack" style="width:').concat(transferWidth, '%"></span></div><div class="metric-bars"><label>Ingresos <strong>').concat(money(row.income), '</strong></label><div><span class="bar income" style="width:').concat(incomeWidth, '%"></span></div><label>Egresos <strong>').concat(money(row.expense), '</strong></label><div><span class="bar expense" style="width:').concat(expenseWidth, '%"></span></div><label>Cliente: ').concat(escapeHtml(row.topClient.name), ' <strong>').concat(row.topClient.count, '</strong></label><div><span class="bar client-bar" style="width:').concat(clientWidth, '%"></span></div><label>Servicio: ').concat(escapeHtml(row.topService.name), ' <strong>').concat(row.topService.count, '</strong></label><div><span class="bar service-bar" style="width:').concat(serviceWidth, '%"></span></div><label>Hora: ').concat(escapeHtml(row.topHour.name), ' <strong>').concat(row.topHour.count, '</strong></label><div><span class="bar hour-bar" style="width:').concat(hourWidth, '%"></span></div></div><div class="metric-score-grid"><span>Pedidos <strong>').concat(row.orders, '</strong></span><span>Ticket <strong>').concat(money(row.averageTicket), '</strong></span><span>Saldo <strong>').concat(money(row.balance), '</strong></span><span>Margen <strong>').concat(row.margin, '%</strong></span></div><p class="metric-insight-chip">').concat(escapeHtml(metricAdvice(row)), '</p></details>');
-    }).join('') || '<p>Cargá movimientos para ver métricas mensuales.</p>', '</div>\n      <div class="table-wrap"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Margen</th><th>Cliente</th><th>Servicio</th><th>Hora fuerte</th></tr></thead><tbody>').concat(rows.map(function (row) { return '<tr><td>'.concat(row.month, '</td><td>').concat(money(row.income), '</td><td>').concat(money(row.expense), '</td><td>').concat(money(row.balance), '</td><td>').concat(row.margin, '%</td><td>').concat(escapeHtml(row.topClient.name), '</td><td>').concat(escapeHtml(row.topService.name), '</td><td>').concat(escapeHtml(row.topHour.name), '</td></tr>'); }).join('') || '<tr><td colspan="8">Sin movimientos de caja.</td></tr>', '</tbody></table></div>\n    </div>');
+    var topClientHtml = (selected.topClients || []).map(function (client, index) {
+        return '<button class="top-client-link" data-action="clientHistory" data-id="'.concat(client.id, '"><span>#').concat(index + 1, '</span><strong>').concat(escapeHtml(client.name), '</strong><small>').concat(client.count, ' pedidos</small></button>');
+    }).join('') || '<p>Sin clientes en este mes.</p>';
+    return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Métricas</p><h2>Resumen mensual</h2><p>Elegí un mes para ver ingresos, egresos, margen, clientes fuertes y horas pico.</p></div>'.concat(rows.length ? monthSelectorHtml(rows, selected.month) : '', '</div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos mes elegido</span><strong>').concat(money(selected.income), '</strong><small>Egresos: ').concat(money(selected.expense), '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(selected.margin, '%</strong><small>Saldo: ').concat(money(selected.balance), '</small></article>\n        <article class="mini-metric metric-glow"><span>Total pedidos por mes</span><strong>').concat(selected.orders, '</strong><small>').concat(escapeHtml(selected.month), '</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? escapeHtml(bestBalance.month) : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cerrá caja para comparar', '</small></article>\n      </div>\n      <div class="metrics-focus-grid"><article class="metric-month-card"><h3>Top 3 clientes del mes</h3><div class="top-client-list">').concat(topClientHtml, '</div></article><article class="metric-month-card"><h3>Pedidos por hora</h3>').concat(orderHourLineChart(selected), '</article></div>\n      ').concat(historicalCashHtml(), '\n    </div>');
 }
 function renderCash() {
     if (!cashUnlocked) {
@@ -738,7 +758,7 @@ function cashTable() {
     var income = state.cash.filter(function (entry) { return entry.type === "Ingreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
     var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
     var balance = income - expense;
-    return '<div class="table-wrap"><table class="cash-movements-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th><th>Acciones</th></tr></thead><tbody>'.concat(entries.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.date), '</td><td><span class="cash-type-badge ').concat(entry.type === "Ingreso" ? "income" : "expense", '">').concat(escapeHtml(entry.type), '</span></td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td>').concat(money(entry.amount), '</td><td><button class="danger small-button" data-action="deleteCashEntry" data-id="').concat(entry.id, '">Borrar</button></td></tr>'); }).join('') || '<tr><td colspan="7">Sin movimientos.</td></tr>', '</tbody><tfoot><tr><th colspan="6">Total ingresos</th><th>').concat(money(income), '</th></tr><tr><th colspan="6">Total egresos</th><th>').concat(money(expense), '</th></tr><tr><th colspan="6">Saldo final</th><th>').concat(money(balance), '</th></tr></tfoot></table></div>');
+    return '<div class="table-wrap"><table class="cash-movements-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th><th>Acciones</th></tr></thead><tbody>'.concat(entries.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.date), '</td><td><span class="cash-type-badge ').concat(entry.type === "Ingreso" ? "income" : "expense", '">').concat(escapeHtml(entry.type), '</span></td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td>').concat(money(entry.amount), '</td><td><button class="cash-delete-link" title="Borrar movimiento" data-action="deleteCashEntry" data-id="').concat(entry.id, '">×</button></td></tr>'); }).join('') || '<tr><td colspan="7">Sin movimientos.</td></tr>', '</tbody><tfoot><tr><th colspan="6">Total ingresos</th><th>').concat(money(income), '</th></tr><tr><th colspan="6">Total egresos</th><th>').concat(money(expense), '</th></tr><tr><th colspan="6">Saldo final</th><th>').concat(money(balance), '</th></tr></tfoot></table></div>');
 }
 function renderCashReports() {
     if (!cashUnlocked) {
@@ -1046,7 +1066,7 @@ function excelCell(value) {
 function exportHistoricalCash() {
     var rows = [["Cierre", "Fecha movimiento", "Tipo", "Categoría", "Descripción", "Medio", "Importe"]];
     (state.cashHistory || []).forEach(function (day) {
-        (day.entries || []).forEach(function (entry) { rows.push([formatDateTime(day.closedAt), formatDateTime(entry.date), entry.type, entry.category, entry.description, paymentMethodLabel(entry.method), entry.amount]); });
+        (day.entries || []).forEach(function (entry) { rows.push([formatDateTime(day.closedAt), formatDateTime(entry.date), entry.type, entry.category, entry.description, paymentMethodLabel(entry.method), signedCashAmount(entry)]); });
     });
     var tableRows = rows.map(function (row, index) {
         var tag = index === 0 ? "th" : "td";

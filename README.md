@@ -34,7 +34,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
 - Caja protegida con clave inicial `1234`, editable desde configuración, ingresos, egresos, efectivo y transferencia; al marcar un pedido como abonado se genera el ingreso correspondiente, y cada movimiento diario puede borrarse si se cargó mal.
 - Gastos por categorías como agua, luz, gas, insumos, alquiler y otros servicios.
-- Caja diaria protegida por clave cada vez que se entra, botón visible para **Empezar nuevo día** que archiva la caja actual en caja histórica, exportación Excel del histórico y métricas mensuales protegidas con clave propia editable, inicial `1111`.
+- Caja diaria protegida por clave cada vez que se entra, botón visible para **Empezar nuevo día** que archiva la caja actual en caja histórica, exportación Excel del histórico y métricas mensuales protegidas con clave propia editable, inicial `1111`, selector de mes, top 3 clientes, gráfico lineal de pedidos por hora, mejor mes histórico y caja histórica visible.
 - Configuración de horarios, máquinas, ciclos, mensajes de WhatsApp, clave de caja y clave de métricas.
 
 ## Flujo diario sugerido
