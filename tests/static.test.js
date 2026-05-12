@@ -96,7 +96,9 @@ assert.match(app, /cash-income-row|cash-expense-row|Saldo final/, 'cash table sh
 assert.match(app, /deleteCashEntry[\s\S]*data-action="deleteCashEntry"/, 'cash entries should be deletable');
 assert.match(app, /closeCashDay[\s\S]*cashHistory|Empezar nuevo día/, 'cash should close the day into historical storage');
 assert.match(app, /exportHistoricalCash[\s\S]*caja-historica[\s\S]*\.xls/, 'cash should export historical cash as an Excel file');
+assert.match(app, /metricsPin: "1111"/, 'metrics PIN should default to 1111');
 assert.match(app, /metricsPin[\s\S]*Clave de métricas/, 'settings should allow editing metrics PIN');
+assert.match(app, /cashReports[\s\S]*metricsPinUnlock|metricsPinUnlock[\s\S]*cashReports/, 'metrics should read its own unlock field instead of the hidden cash PIN field');
 assert.doesNotMatch(app, /data-action="exportData"|data-action="importData"/, 'settings should not expose generic import/export data actions');
 assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
 assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');

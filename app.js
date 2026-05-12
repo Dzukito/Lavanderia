@@ -61,7 +61,7 @@ var defaultData = {
         storageNoticeDays: 30,
         storageNoticeText: "Condiciones de guarda: conforme las condiciones informadas al momento de recepción y el deber de información clara previsto por la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días corridos desde el aviso de disponibilidad podrán generar cargos de guarda y/o ser derivados a donación previa comunicación fehaciente al cliente. Texto sujeto a validación legal local.",
         cashPin: "1234",
-        metricsPin: "1234",
+        metricsPin: "1111",
     },
     services: [
         { id: 1, name: "Valet", price: 3500, wash: true, dry: true },
@@ -197,6 +197,8 @@ function loadState() {
         return defaults;
     }
     var merged = __assign(__assign(__assign({}, defaults), parsed), { settings: __assign(__assign({}, defaults.settings), (parsed.settings || {})), services: parsed.services && parsed.services.length ? parsed.services : defaults.services, clients: parsed.clients && parsed.clients.length ? parsed.clients : defaults.clients, orders: parsed.orders || defaults.orders, cash: parsed.cash || defaults.cash, locations: mergeLocations(defaults.locations, parsed.locations), cashHistory: parsed.cashHistory || defaults.cashHistory });
+    if (!parsed.settings || !Object.prototype.hasOwnProperty.call(parsed.settings, "metricsPin") || parsed.settings.metricsPin === "1234")
+        merged.settings.metricsPin = defaults.settings.metricsPin;
     merged.clients = merged.clients.map(function (client) { return (__assign({ authorizedPickups: "" }, client)); });
     merged.orders = merged.orders.map(function (order) {
         var paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
@@ -718,7 +720,7 @@ function cashReportHtml() {
 }
 function renderCash() {
     if (!cashUnlocked) {
-        document.getElementById("cash").innerHTML = '<div class="card"><h2>Caja protegida</h2><p>Ingresá la clave del dueño para ver ingresos, egresos y saldos.</p><div class="form-grid"><label>Clave<input id="cashPin" type="password" placeholder="Clave" /></label></div><br><button class="primary" data-action="unlockCash">Entrar</button><p><small>La clave inicial es 1234 y puede cambiarse desde Configuración.</small></p></div>';
+        document.getElementById("cash").innerHTML = '<div class="card"><h2>Caja protegida</h2><p>Ingresá la clave del dueño para ver ingresos, egresos y saldos.</p><div class="form-grid"><label>Clave<input id="cashPinUnlock" type="password" placeholder="Clave" /></label></div><br><button class="primary" data-action="unlockCash">Entrar</button><p><small>La clave inicial es 1234 y puede cambiarse desde Configuración.</small></p></div>';
         return;
     }
     var income = state.cash.filter(function (entry) { return entry.type === "Ingreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount); }, 0);
@@ -740,7 +742,7 @@ function cashTable() {
 }
 function renderCashReports() {
     if (!cashUnlocked) {
-        document.getElementById("cashReports").innerHTML = "<div class=\"card\"><h2>Métricas protegidas</h2><p>Ingresá la clave de métricas para ver gráficos, insights y comparaciones de caja.</p><div class=\"form-grid\"><label>Clave<input id=\"cashPin\" type=\"password\" placeholder=\"Clave\" /></label></div><br><button class=\"primary\" data-action=\"unlockCash\">Entrar</button></div>";
+        document.getElementById("cashReports").innerHTML = "<div class=\"card\"><h2>Métricas protegidas</h2><p>Ingresá la clave de métricas para ver gráficos, insights y comparaciones de caja.</p><div class=\"form-grid\"><label>Clave<input id=\"metricsPinUnlock\" type=\"password\" placeholder=\"Clave\" /></label></div><br><button class=\"primary\" data-action=\"unlockCash\">Entrar</button></div>";
         return;
     }
     document.getElementById("cashReports").innerHTML = cashReportHtml();
@@ -991,7 +993,8 @@ function sendStorageNotice(id) {
     window.open("https://wa.me/".concat(phone, "?text=").concat(encodeURIComponent(storageNoticeText(order))), "_blank");
 }
 function unlockCash() {
-    cashUnlocked = document.getElementById("cashPin").value === (currentView === "cashReports" ? state.settings.metricsPin : state.settings.cashPin);
+    var pinInput = document.getElementById(currentView === "cashReports" ? "metricsPinUnlock" : "cashPinUnlock");
+    cashUnlocked = pinInput && pinInput.value === (currentView === "cashReports" ? state.settings.metricsPin : state.settings.cashPin);
     if (!cashUnlocked)
         alert("Clave incorrecta");
     render();
