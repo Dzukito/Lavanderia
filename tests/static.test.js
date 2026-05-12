@@ -41,8 +41,9 @@ for (const feature of [
   'openClientHistoryModal',
   'openOrderViewModal',
   'saveMachineSlot',
-  'exportData',
-  'importData',
+  'deleteCashEntry',
+  'closeCashDay',
+  'exportHistoricalCash',
   'itemLineTotal',
   'orderItemsTotal',
   'orderItemsHtml',
@@ -84,6 +85,7 @@ assert.match(app, /wasPaidBeforeRetired/, 'retired state should remember previou
 assert.match(app, /orderItemsHtml/, 'orders should render itemized garments with prices');
 assert.doesNotMatch(app, /escapeHtml\(itemSummary\(order\)\).*formatDateTime/, 'order header should not duplicate item summary above item list');
 assert.match(app, /metricInsight/, 'metrics should expose monthly insights');
+assert.match(app, /metricAdvice|interactive-card|stacked-bar/, 'metrics should expose interactive insight graphics');
 assert.match(app, /pie-chart|pieStyle|topClient|topService|topHour/, 'metrics should include pie charts and client/service/hour insights');
 assert.doesNotMatch(app, /Insights para el dueño/, 'metrics should not show the owner insights banner');
 assert.match(app, /Métricas protegidas|cashReports[\s\S]*cashUnlocked/, 'metrics should require PIN');
@@ -91,6 +93,11 @@ assert.match(app, /metric-score-grid|client-bar|service-bar|hour-bar/, 'metrics 
 assert.doesNotMatch(app, /💵|🏦/, 'payment method labels should not include emoji icons');
 assert.match(app, /copyWhatsapp[\s\S]*copy-status/, 'WhatsApp copy buttons should show copied feedback');
 assert.match(app, /cash-income-row|cash-expense-row|Saldo final/, 'cash table should group income and expense with totals');
+assert.match(app, /deleteCashEntry[\s\S]*data-action="deleteCashEntry"/, 'cash entries should be deletable');
+assert.match(app, /closeCashDay[\s\S]*cashHistory|Empezar nuevo día/, 'cash should close the day into historical storage');
+assert.match(app, /exportHistoricalCash[\s\S]*caja-historica[\s\S]*\.xls/, 'cash should export historical cash as an Excel file');
+assert.match(app, /metricsPin[\s\S]*Clave de métricas/, 'settings should allow editing metrics PIN');
+assert.doesNotMatch(app, /data-action="exportData"|data-action="importData"/, 'settings should not expose generic import/export data actions');
 assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
 assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
@@ -98,7 +105,7 @@ assert.match(app, /if \(view === "cash" \|\| view === "cashReports"\)[\s\S]{0,80
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'pie-row', 'pie-chart', 'copy-status']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'stacked-bar', 'metric-glow', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'pie-row', 'pie-chart', 'copy-status']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 
