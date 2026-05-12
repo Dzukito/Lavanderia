@@ -275,3 +275,13 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .metric-bars .transfer { background: #845ef7; }
 .metric-insights { background: #f8fbff; border-radius: 14px; padding: 10px; }
 .metric-insights p { margin: 4px 0; }
+.copy-status { color: #2b8a3e; font-weight: 900; min-height: 22px; }
+.pie-row { display: flex; gap: 14px; margin: 12px 0; }
+.pie-chart { align-items: center; border: 6px solid #eef4ff; border-radius: 50%; display: inline-flex; height: 104px; justify-content: center; width: 104px; }
+.pie-chart span { background: rgba(255,255,255,.9); border-radius: 999px; font-size: 12px; font-weight: 900; padding: 5px 8px; }
+.cash-income-row { background: #ebfbee; }
+.cash-expense-row { background: #fff5f5; }
+.cash-type-badge { border-radius: 999px; display: inline-flex; font-weight: 900; padding: 4px 9px; }
+.cash-type-badge.income { background: #d3f9d8; color: #2b8a3e; }
+.cash-type-badge.expense { background: #ffe3e3; color: #c92a2a; }
+.cash-movements-table tfoot th { background: #eef4ff; font-size: 16px; }

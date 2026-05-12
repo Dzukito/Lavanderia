@@ -328,7 +328,21 @@ function monthlyCashSummary() {
         var orderTotal = monthOrders.reduce(function (sum, order) { return sum + Number(order.total || 0); }, 0);
         var averageTicket = monthOrders.length ? Math.round(orderTotal / monthOrders.length) : 0;
         var topMethod = Math.abs(values.transfer) > Math.abs(values.cash) ? "Transferencia" : "Efectivo";
-        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff, orders: monthOrders.length, orderTotal: orderTotal, averageTicket: averageTicket, topMethod: topMethod });
+        var services = {};
+        var clients = {};
+        var hours = {};
+        monthOrders.forEach(function (order) {
+            var clientName = orderClient(order);
+            clients[clientName] = (clients[clientName] || 0) + 1;
+            var hour = new Date(order.createdAt).getHours();
+            var hourText = String(hour).padStart(2, "0") + ":00";
+            hours[hourText] = (hours[hourText] || 0) + 1;
+            (order.items || []).forEach(function (item) {
+                var serviceName = item.serviceName || serviceSummary(order);
+                services[serviceName] = (services[serviceName] || 0) + Number(item.quantity || 1);
+            });
+        });
+        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff, orders: monthOrders.length, orderTotal: orderTotal, averageTicket: averageTicket, topMethod: topMethod, topClient: topMetric(clients), topService: topMetric(services), topHour: topMetric(hours) });
     });
 }
 function metricInsight(row) {
@@ -341,6 +355,19 @@ function metricInsight(row) {
     if (row.diff < 0)
         return "El saldo bajó " + Math.abs(row.diff) + "%: revisar egresos y tickets.";
     return "Saldo estable frente al mes anterior.";
+}
+function topMetric(values) {
+    var best = { name: "Sin datos", count: 0 };
+    for (var key in values) {
+        if (Object.prototype.hasOwnProperty.call(values, key) && values[key] > best.count)
+            best = { name: key, count: values[key] };
+    }
+    return best;
+}
+function pieStyle(primary, secondary) {
+    var total = Math.abs(primary) + Math.abs(secondary);
+    var percent = total ? Math.round((Math.abs(primary) / total) * 100) : 50;
+    return "background: conic-gradient(#2f6bff 0 " + percent + "%, #ff6b6b " + percent + "% 100%)";
 }
 function messageForOrder(order, type) {
     var templates = {
@@ -407,6 +434,7 @@ document.addEventListener("click", function (event) {
         nextWeek: function () { return moveScheduleWeek(7); },
         todayWeek: function () { return setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)); },
         sendWhatsapp: function () { return sendWhatsapp(id, target.getAttribute("data-message-type")); },
+        copyWhatsapp: function () { return copyWhatsapp(id, target.getAttribute("data-message-type")); },
         copyNotice: copyVisibleNotice,
         sendStorageNotice: function () { return sendStorageNotice(id); },
         machineEdit: function () { return openMachineModal(target.getAttribute("data-machine")); },
@@ -429,6 +457,8 @@ document.addEventListener("click", function (event) {
 document.addEventListener("input", function (event) {
     if (event.target.matches("[data-search-orders], [data-order-date]"))
         applyOrderFilters();
+    if (event.target.matches("[data-search-clients]"))
+        filterClients(event.target.value);
 });
 document.addEventListener("change", function (event) {
     if (event.target.matches("[data-schedule-week]")) {
@@ -526,13 +556,25 @@ window.filterOrders = function (query, date) {
 };
 function orderCards(orders, title, compact) {
     if (compact === void 0) { compact = false; }
-    return "\n    <div class=\"card orders-panel\">\n      <h2>".concat(escapeHtml(title), "</h2>\n      <div class=\"order-card-list\">").concat(orders.map(function (order) { return "\n        <article class=\"order-card ".concat(normalizeClass(orderGroup(order)), "\">\n          <div class=\"order-main\"><strong class=\"order-code\">").concat(escapeHtml(orderDisplayCode(order)), "</strong><span class=\"badge ").concat(normalizeClass(orderGroup(order)), "\">").concat(escapeHtml(orderGroup(order)), "</span></div>\n          <div><strong>").concat(escapeHtml(orderClient(order)), "</strong><br><small>").concat(escapeHtml(itemSummary(order)), " \u00B7 ").concat(formatDateTime(order.estimate), "</small></div>\n          <p class=\"order-notes\">").concat(escapeHtml(order.notes || "Sin observaciones"), "</p>\n          <div class=\"order-meta\"><span>Pago: ").concat(paymentBadge(order), " ").concat(paymentMethodLabel(order.paymentMethod), "</span><span>Total: ").concat(money(order.total), "</span></div>\n          <div class=\"actions\"><button class=\"secondary\" data-action=\"orderState\" data-id=\"").concat(order.id, "\">Estado</button><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div>\n        </article>"); }).join("") || "<p>No hay pedidos para mostrar.</p>", "</div>\n    </div>");
+    return "\n    <div class=\"card orders-panel\">\n      <h2>".concat(escapeHtml(title), "</h2>\n      <div class=\"order-card-list\">").concat(orders.map(function (order) { return "\n        <article class=\"order-card ".concat(normalizeClass(orderGroup(order)), "\">\n          <div class=\"order-main\"><strong class=\"order-code\">").concat(escapeHtml(orderDisplayCode(order)), "</strong><span class=\"badge ").concat(normalizeClass(orderGroup(order)), "\">").concat(escapeHtml(orderGroup(order)), "</span></div>\n          <div><strong>").concat(escapeHtml(orderClient(order)), "</strong><br><small>").concat(escapeHtml(itemSummary(order)), " · ").concat(formatDateTime(order.estimate), "</small></div>\n          <p class=\"order-notes\">").concat(escapeHtml(order.notes || "Sin observaciones"), "</p>\n          ").concat(orderItemsHtml(order), "\n          <div class=\"order-meta\"><span>Pago: ").concat(paymentBadge(order), " ").concat(paymentMethodLabel(order.paymentMethod), "</span><span>Total: ").concat(money(order.total), "</span></div>\n          <div class=\"actions\"><button class=\"secondary\" data-action=\"orderState\" data-id=\"").concat(order.id, "\">Estado</button><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div>\n        </article>"); }).join("") || "<p>No hay pedidos para mostrar.</p>", "</div>\n    </div>");
 }
 function ordersTable(orders, title) {
     return orderCards(orders, title, false);
 }
+function clientCards(clients) {
+    return clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"secondary\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"secondary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join("") || "<p>No hay clientes para mostrar.</p>";
+}
+function filterClients(query) {
+    var value = String(query || "").toLowerCase();
+    var filtered = state.clients.filter(function (client) {
+        return (client.name + " " + client.phone + " " + (client.address || "") + " " + (client.notes || "") + " " + (client.authorizedPickups || "")).toLowerCase().indexOf(value) !== -1;
+    });
+    var target = document.getElementById("clientsList");
+    if (target)
+        target.innerHTML = clientCards(filtered);
+}
 function renderClients() {
-    document.getElementById("clients").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Personas</p><h2>Clientes</h2></div><button class=\"primary\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"client-card-grid\">".concat(state.clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"secondary\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"secondary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join(""), "</div>\n    </div>");
+    document.getElementById("clients").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Personas</p><h2>Clientes</h2></div><button class=\"primary\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"filters-row\"><input id=\"clientSearch\" data-search-clients placeholder=\"Buscar cliente por nombre, teléfono, autorizado o notas\" /></div>\n      <div id=\"clientsList\" class=\"client-card-grid\">".concat(clientCards(state.clients), "</div>\n    </div>");
 }
 function renderSchedule() {
     var machines = __spreadArray(__spreadArray([], LaundryScheduler.machineNames("Lavado", state.settings.smallWashers).map(function (name) { return ({ type: "Lavado", name: name }); }), true), LaundryScheduler.machineNames("Secado", state.settings.dryers).map(function (name) { return ({ type: "Secado", name: name }); }), true);
@@ -638,15 +680,15 @@ function openStorageOrder(id) {
 }
 function cashReportHtml() {
     var rows = monthlyCashSummary();
-    var latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0, orders: 0, averageTicket: 0, topMethod: "Efectivo" };
-    return "\n    <div class=\"card report-panel metrics-panel\"><div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Caja mes por mes</p><h2>Métricas</h2><p>Comparación simple de ingresos, egresos, saldo, medios de pago y tickets.</p></div><span class=\"status-pill light\">Insights para el dueño</span></div>\n      <div class=\"grid four report-metrics\">\n        <article class=\"mini-metric\"><span>Ingresos último mes</span><strong>".concat(money(latest.income), "</strong></article>\n        <article class=\"mini-metric\"><span>Saldo último mes</span><strong>").concat(money(latest.balance), "</strong></article>\n        <article class=\"mini-metric\"><span>Pedidos</span><strong>").concat(latest.orders, "</strong></article>\n        <article class=\"mini-metric\"><span>Ticket promedio</span><strong>").concat(money(latest.averageTicket), "</strong></article>\n      </div>\n      <div class=\"metrics-month-grid\">").concat(rows.map(function (row) {
+    var latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0, orders: 0, averageTicket: 0, topMethod: "Efectivo", topClient: { name: "Sin datos", count: 0 }, topService: { name: "Sin datos", count: 0 }, topHour: { name: "Sin datos", count: 0 } };
+    return "\n    <div class=\"card report-panel metrics-panel\"><div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Caja mes por mes</p><h2>Métricas</h2><p>Comparación de varios meses con clientes, servicios y horas fuertes.</p></div></div>\n      <div class=\"grid four report-metrics\">\n        <article class=\"mini-metric\"><span>Ingresos último mes</span><strong>".concat(money(latest.income), "</strong></article>\n        <article class=\"mini-metric\"><span>Saldo último mes</span><strong>").concat(money(latest.balance), "</strong></article>\n        <article class=\"mini-metric\"><span>Cliente frecuente</span><strong>").concat(escapeHtml(latest.topClient.name), "</strong></article>\n        <article class=\"mini-metric\"><span>Hora fuerte</span><strong>").concat(escapeHtml(latest.topHour.name), "</strong></article>\n      </div>\n      <div class=\"metrics-month-grid\">").concat(rows.map(function (row) {
         var max = Math.max(row.income, row.expense, Math.abs(row.cash), Math.abs(row.transfer), 1);
         var incomeWidth = Math.max(4, (row.income / max) * 100);
         var expenseWidth = Math.max(4, (row.expense / max) * 100);
         var cashWidth = Math.max(4, (Math.abs(row.cash) / max) * 100);
         var transferWidth = Math.max(4, (Math.abs(row.transfer) / max) * 100);
-        return "<article class=\"metric-month-card\"><div class=\"metric-month-head\"><h3>".concat(row.month, "</h3><span>").concat(row.diff === null ? "Sin comparativo" : row.diff + "% vs anterior", "</span></div><div class=\"metric-bars\"><label>Ingresos <strong>").concat(money(row.income), "</strong></label><div><span class=\"bar income\" style=\"width:").concat(incomeWidth, "%\"></span></div><label>Egresos <strong>").concat(money(row.expense), "</strong></label><div><span class=\"bar expense\" style=\"width:").concat(expenseWidth, "%\"></span></div><label>Efectivo <strong>").concat(money(row.cash), "</strong></label><div><span class=\"bar cash\" style=\"width:").concat(cashWidth, "%\"></span></div><label>Transferencia <strong>").concat(money(row.transfer), "</strong></label><div><span class=\"bar transfer\" style=\"width:").concat(transferWidth, "%\"></span></div></div><div class=\"metric-insights\"><p><strong>Saldo:</strong> ").concat(money(row.balance), "</p><p><strong>Pedidos:</strong> ").concat(row.orders, " · <strong>Ticket prom.:</strong> ").concat(money(row.averageTicket), "</p><p><strong>Medio fuerte:</strong> ").concat(escapeHtml(row.topMethod), "</p><p>").concat(escapeHtml(metricInsight(row)), "</p></div></article>");
-    }).join("") || "<p>Cargá movimientos para ver métricas mensuales.</p>", "</div>\n      <div class=\"table-wrap\"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs anterior</th><th>Pedidos</th><th>Ticket prom.</th><th>Medio fuerte</th></tr></thead><tbody>").concat(rows.map(function (row) { return "<tr><td>".concat(row.month, "</td><td>").concat(money(row.income), "</td><td>").concat(money(row.expense), "</td><td>").concat(money(row.balance), "</td><td>").concat(row.diff === null ? "-" : "".concat(row.diff, "%"), "</td><td>").concat(row.orders, "</td><td>").concat(money(row.averageTicket), "</td><td>").concat(escapeHtml(row.topMethod), "</td></tr>"); }).join("") || "<tr><td colspan=\"8\">Sin movimientos de caja.</td></tr>", "</tbody></table></div>\n    </div>");
+        return "<article class=\"metric-month-card\"><div class=\"metric-month-head\"><h3>".concat(row.month, "</h3><span>").concat(row.diff === null ? "Sin comparativo" : row.diff + "% vs anterior", "</span></div><div class=\"pie-row\"><div class=\"pie-chart\" style=\"").concat(pieStyle(row.income, row.expense), "\"><span>Ing/Egr</span></div><div class=\"pie-chart payment-pie\" style=\"").concat(pieStyle(row.cash, row.transfer), "\"><span>Medios</span></div></div><div class=\"metric-bars\"><label>Ingresos <strong>").concat(money(row.income), "</strong></label><div><span class=\"bar income\" style=\"width:").concat(incomeWidth, "%\"></span></div><label>Egresos <strong>").concat(money(row.expense), "</strong></label><div><span class=\"bar expense\" style=\"width:").concat(expenseWidth, "%\"></span></div><label>Efectivo <strong>").concat(money(row.cash), "</strong></label><div><span class=\"bar cash\" style=\"width:").concat(cashWidth, "%\"></span></div><label>Transferencia <strong>").concat(money(row.transfer), "</strong></label><div><span class=\"bar transfer\" style=\"width:").concat(transferWidth, "%\"></span></div></div><div class=\"metric-insights\"><p><strong>Cliente:</strong> ").concat(escapeHtml(row.topClient.name), " (").concat(row.topClient.count, ")</p><p><strong>Servicio:</strong> ").concat(escapeHtml(row.topService.name), " (").concat(row.topService.count, ")</p><p><strong>Hora con más turnos:</strong> ").concat(escapeHtml(row.topHour.name), "</p><p><strong>Ticket prom.:</strong> ").concat(money(row.averageTicket), " · <strong>Saldo:</strong> ").concat(money(row.balance), "</p><p>").concat(escapeHtml(metricInsight(row)), "</p></div></article>");
+    }).join("") || "<p>Cargá movimientos para ver métricas mensuales.</p>", "</div>\n      <div class=\"table-wrap\"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs anterior</th><th>Cliente</th><th>Servicio</th><th>Hora fuerte</th></tr></thead><tbody>").concat(rows.map(function (row) { return "<tr><td>".concat(row.month, "</td><td>").concat(money(row.income), "</td><td>").concat(money(row.expense), "</td><td>").concat(money(row.balance), "</td><td>").concat(row.diff === null ? "-" : "".concat(row.diff, "%"), "</td><td>").concat(escapeHtml(row.topClient.name), "</td><td>").concat(escapeHtml(row.topService.name), "</td><td>").concat(escapeHtml(row.topHour.name), "</td></tr>"); }).join("") || "<tr><td colspan=\"8\">Sin movimientos de caja.</td></tr>", "</tbody></table></div>\n    </div>");
 }
 function renderCash() {
     if (!cashUnlocked) {
@@ -660,7 +702,15 @@ function renderCash() {
     document.getElementById("cash").innerHTML = "\n    <div class=\"grid four\"><article class=\"card metric\"><span>Ingresos</span><strong>".concat(money(income), "</strong></article><article class=\"card metric\"><span>Egresos</span><strong>").concat(money(expense), "</strong></article><article class=\"card metric\"><span>Efectivo</span><strong>").concat(money(cash), "</strong></article><article class=\"card metric\"><span>Transferencia</span><strong>").concat(money(transfer), "</strong></article></div>\n    <div class=\"card cash-section\"><div class=\"toolbar\"><h2>Caja del d\u00EDa / movimientos</h2><div class=\"actions\"><button class=\"success\" data-action=\"cashIncome\">+ Ingreso</button><button class=\"danger\" data-action=\"cashExpense\">+ Egreso</button></div></div>").concat(cashTable(), "</div>");
 }
 function cashTable() {
-    return "<div class=\"table-wrap\"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Categor\u00EDa</th><th>Descripci\u00F3n</th><th>Medio</th><th>Importe</th></tr></thead><tbody>".concat(__spreadArray([], state.cash, true).reverse().map(function (entry) { return "<tr><td>".concat(formatDateTime(entry.date), "</td><td>").concat(escapeHtml(entry.type), "</td><td>").concat(escapeHtml(entry.category), "</td><td>").concat(escapeHtml(entry.description), "</td><td>").concat(paymentMethodLabel(entry.method), "</td><td>").concat(money(entry.amount), "</td></tr>"); }).join("") || "<tr><td colspan=\"6\">Sin movimientos.</td></tr>", "</tbody></table></div>");
+    var entries = __spreadArray([], state.cash, true).sort(function (a, b) {
+        if (a.type !== b.type)
+            return a.type === "Ingreso" ? -1 : 1;
+        return new Date(b.date) - new Date(a.date);
+    });
+    var income = state.cash.filter(function (entry) { return entry.type === "Ingreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
+    var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
+    var balance = income - expense;
+    return "<div class=\"table-wrap\"><table class=\"cash-movements-table\"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>".concat(entries.map(function (entry) { return "<tr class=\"".concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", "\"><td>").concat(formatDateTime(entry.date), "</td><td><span class=\"cash-type-badge ").concat(entry.type === "Ingreso" ? "income" : "expense", "\">").concat(escapeHtml(entry.type), "</span></td><td>").concat(escapeHtml(entry.category), "</td><td>").concat(escapeHtml(entry.description), "</td><td>").concat(paymentMethodLabel(entry.method), "</td><td>").concat(money(entry.amount), "</td></tr>"); }).join("") || "<tr><td colspan=\"6\">Sin movimientos.</td></tr>", "</tbody><tfoot><tr><th colspan=\"5\">Total ingresos</th><th>").concat(money(income), "</th></tr><tr><th colspan=\"5\">Total egresos</th><th>").concat(money(expense), "</th></tr><tr><th colspan=\"5\">Saldo final</th><th>").concat(money(balance), "</th></tr></tfoot></table></div>");
 }
 function renderCashReports() {
     document.getElementById("cashReports").innerHTML = cashReportHtml();
@@ -857,16 +907,37 @@ function openWhatsappMenu(id) {
     var order = getOrder(id);
     if (!order)
         return;
-    openModal("Mensajes WhatsApp #".concat(escapeHtml(order.number)), "\n    <div class=\"message-list\">\n      <button class=\"secondary\" data-action=\"sendWhatsapp\" data-message-type=\"received\" data-id=\"".concat(order.id, "\">Recibimos tu pedido</button>\n      <button class=\"success\" data-action=\"sendWhatsapp\" data-message-type=\"ready\" data-id=\"").concat(order.id, "\">Tu pedido est\u00E1 listo</button>\n      <button class=\"secondary\" data-action=\"sendWhatsapp\" data-message-type=\"retired\" data-id=\"").concat(order.id, "\">Retir\u00F3 su pedido</button>\n      <div class=\"copy-row\"><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"received\" data-id=\"").concat(order.id, "\">Copiar recibido</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"ready\" data-id=\"").concat(order.id, "\">Copiar listo</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"retired\" data-id=\"").concat(order.id, "\">Copiar retirado</button></div>\n      <textarea readonly>").concat(escapeHtml(messageForOrder(order, "ready")), "</textarea>\n    </div>"));
+    var html = "<div class=\"message-list\">" +
+        "<button class=\"secondary\" data-action=\"sendWhatsapp\" data-message-type=\"received\" data-id=\"" + order.id + "\">Recibimos tu pedido</button>" +
+        "<button class=\"success\" data-action=\"sendWhatsapp\" data-message-type=\"ready\" data-id=\"" + order.id + "\">Tu pedido está listo</button>" +
+        "<button class=\"secondary\" data-action=\"sendWhatsapp\" data-message-type=\"retired\" data-id=\"" + order.id + "\">Retiró su pedido</button>" +
+        "<div class=\"copy-row\"><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"received\" data-id=\"" + order.id + "\">Copiar recibido</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"ready\" data-id=\"" + order.id + "\">Copiar listo</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"retired\" data-id=\"" + order.id + "\">Copiar retirado</button></div>" +
+        "<p class=\"copy-status\" aria-live=\"polite\"></p>" +
+        "<textarea readonly>" + escapeHtml(messageForOrder(order, "ready")) + "</textarea></div>";
+    openModal("Mensajes WhatsApp #".concat(escapeHtml(order.number)), html);
 }
 function copyWhatsapp(id, type) {
     if (type === void 0) { type = "ready"; }
-    var text = messageForOrder(getOrder(id), type);
-    if (navigator.clipboard)
-        navigator.clipboard.writeText(text);
-    else
+    var order = getOrder(id);
+    if (!order)
+        return;
+    var text = messageForOrder(order, type);
+    var status = document.querySelector(".copy-status");
+    function notify() {
+        if (status)
+            status.textContent = "Mensaje copiado: " + (type === "received" ? "recibido" : type === "retired" ? "retirado" : "listo");
+    }
+    if (window.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        var result = navigator.clipboard.writeText(text);
+        if (result && result.then)
+            result.then(notify, function () { prompt("Copiá el mensaje para WhatsApp", text); notify(); });
+        else
+            notify();
+    }
+    else {
         prompt("Copiá el mensaje para WhatsApp", text);
-    alert("Mensaje preparado para enviar manualmente por WhatsApp.");
+        notify();
+    }
 }
 function openStorageNoticeModal(id) {
     var order = id ? getOrder(id) : null;
