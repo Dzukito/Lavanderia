@@ -324,8 +324,23 @@ function monthlyCashSummary() {
         var previousValues = index > 0 ? summary[months[index - 1]] : null;
         var previous = previousValues ? previousValues.income - previousValues.expense : null;
         var diff = previous ? Math.round(((balance - previous) / Math.abs(previous)) * 100) : null;
-        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff });
+        var monthOrders = state.orders.filter(function (order) { return monthKey(order.createdAt) === month; });
+        var orderTotal = monthOrders.reduce(function (sum, order) { return sum + Number(order.total || 0); }, 0);
+        var averageTicket = monthOrders.length ? Math.round(orderTotal / monthOrders.length) : 0;
+        var topMethod = Math.abs(values.transfer) > Math.abs(values.cash) ? "Transferencia" : "Efectivo";
+        return __assign(__assign({ month: month }, values), { balance: balance, diff: diff, orders: monthOrders.length, orderTotal: orderTotal, averageTicket: averageTicket, topMethod: topMethod });
     });
+}
+function metricInsight(row) {
+    if (!row.income && !row.expense)
+        return "Sin movimientos todavía.";
+    if (row.diff === null)
+        return "Primer mes con datos para comparar.";
+    if (row.diff > 0)
+        return "El saldo mejoró " + row.diff + "% contra el mes anterior.";
+    if (row.diff < 0)
+        return "El saldo bajó " + Math.abs(row.diff) + "%: revisar egresos y tickets.";
+    return "Saldo estable frente al mes anterior.";
 }
 function messageForOrder(order, type) {
     var templates = {
@@ -443,6 +458,12 @@ function itemSummary(order) {
         var prefix = quantity > 1 ? quantity + " x " : "";
         return "".concat(prefix).concat(item.name, " (").concat(money(itemLineTotal(item)), ")");
     }).join(" · ") || serviceSummary(order);
+}
+function orderItemsHtml(order) {
+    var items = order.items || [];
+    return "<div class=\"order-items-list\">".concat(items.map(function (item) {
+        return "<div class=\"order-item-line\"><span>".concat(Number(item.quantity || 1), " x ").concat(escapeHtml(item.name), "</span><small>").concat(escapeHtml(item.serviceName || serviceSummary(order)), " · unit. ").concat(money(item.price), "</small><strong>").concat(money(itemLineTotal(item)), "</strong></div>");
+    }).join("") || "<p>Sin prendas cargadas.</p>", "</div>");
 }
 function paymentBadge(order) {
     var status = order.paymentStatus || "Pendiente";
@@ -617,11 +638,15 @@ function openStorageOrder(id) {
 }
 function cashReportHtml() {
     var rows = monthlyCashSummary();
-    var latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0 };
-    return "\n    <div class=\"card report-panel cash-report-section\"><div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Reportes de caja</p><h2>Comparaci\u00F3n mes a mes</h2></div><span class=\"status-pill light\">Separado de la caja diaria</span></div>\n      <div class=\"grid four report-metrics\">\n        <article class=\"mini-metric\"><span>Ingresos mes</span><strong>".concat(money(latest.income), "</strong></article>\n        <article class=\"mini-metric\"><span>Egresos mes</span><strong>").concat(money(latest.expense), "</strong></article>\n        <article class=\"mini-metric\"><span>Saldo mes</span><strong>").concat(money(latest.balance), "</strong></article>\n        <article class=\"mini-metric\"><span>Vs anterior</span><strong>").concat(latest.diff === null ? "-" : "".concat(latest.diff, "%"), "</strong></article>\n      </div>\n      <div class=\"bar-list\">").concat(rows.map(function (row) {
-        var max = Math.max(row.income, row.expense, 1);
-        return "<div class=\"bar-row\"><div><strong>".concat(row.month, "</strong><small>Saldo ").concat(money(row.balance), " \u00B7 Efectivo ").concat(money(row.cash), " \u00B7 Transf. ").concat(money(row.transfer), "</small></div><div class=\"bars\"><span class=\"bar income\" style=\"width:").concat(Math.max(4, (row.income / max) * 100), "%\"></span><span class=\"bar expense\" style=\"width:").concat(Math.max(4, (row.expense / max) * 100), "%\"></span></div></div>");
-    }).join("") || "<p>Carg\u00E1 movimientos para ver la comparaci\u00F3n mensual.</p>", "</div>\n      <div class=\"table-wrap\"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs mes anterior</th><th>Efectivo</th><th>Transferencia</th></tr></thead><tbody>").concat(rows.map(function (row) { return "<tr><td>".concat(row.month, "</td><td>").concat(money(row.income), "</td><td>").concat(money(row.expense), "</td><td>").concat(money(row.balance), "</td><td>").concat(row.diff === null ? "-" : "".concat(row.diff, "%"), "</td><td>").concat(money(row.cash), "</td><td>").concat(money(row.transfer), "</td></tr>"); }).join("") || "<tr><td colspan=\"7\">Sin movimientos de caja.</td></tr>", "</tbody></table></div>\n    </div>");
+    var latest = rows[rows.length - 1] || { income: 0, expense: 0, balance: 0, diff: null, cash: 0, transfer: 0, orders: 0, averageTicket: 0, topMethod: "Efectivo" };
+    return "\n    <div class=\"card report-panel metrics-panel\"><div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Caja mes por mes</p><h2>Métricas</h2><p>Comparación simple de ingresos, egresos, saldo, medios de pago y tickets.</p></div><span class=\"status-pill light\">Insights para el dueño</span></div>\n      <div class=\"grid four report-metrics\">\n        <article class=\"mini-metric\"><span>Ingresos último mes</span><strong>".concat(money(latest.income), "</strong></article>\n        <article class=\"mini-metric\"><span>Saldo último mes</span><strong>").concat(money(latest.balance), "</strong></article>\n        <article class=\"mini-metric\"><span>Pedidos</span><strong>").concat(latest.orders, "</strong></article>\n        <article class=\"mini-metric\"><span>Ticket promedio</span><strong>").concat(money(latest.averageTicket), "</strong></article>\n      </div>\n      <div class=\"metrics-month-grid\">").concat(rows.map(function (row) {
+        var max = Math.max(row.income, row.expense, Math.abs(row.cash), Math.abs(row.transfer), 1);
+        var incomeWidth = Math.max(4, (row.income / max) * 100);
+        var expenseWidth = Math.max(4, (row.expense / max) * 100);
+        var cashWidth = Math.max(4, (Math.abs(row.cash) / max) * 100);
+        var transferWidth = Math.max(4, (Math.abs(row.transfer) / max) * 100);
+        return "<article class=\"metric-month-card\"><div class=\"metric-month-head\"><h3>".concat(row.month, "</h3><span>").concat(row.diff === null ? "Sin comparativo" : row.diff + "% vs anterior", "</span></div><div class=\"metric-bars\"><label>Ingresos <strong>").concat(money(row.income), "</strong></label><div><span class=\"bar income\" style=\"width:").concat(incomeWidth, "%\"></span></div><label>Egresos <strong>").concat(money(row.expense), "</strong></label><div><span class=\"bar expense\" style=\"width:").concat(expenseWidth, "%\"></span></div><label>Efectivo <strong>").concat(money(row.cash), "</strong></label><div><span class=\"bar cash\" style=\"width:").concat(cashWidth, "%\"></span></div><label>Transferencia <strong>").concat(money(row.transfer), "</strong></label><div><span class=\"bar transfer\" style=\"width:").concat(transferWidth, "%\"></span></div></div><div class=\"metric-insights\"><p><strong>Saldo:</strong> ").concat(money(row.balance), "</p><p><strong>Pedidos:</strong> ").concat(row.orders, " · <strong>Ticket prom.:</strong> ").concat(money(row.averageTicket), "</p><p><strong>Medio fuerte:</strong> ").concat(escapeHtml(row.topMethod), "</p><p>").concat(escapeHtml(metricInsight(row)), "</p></div></article>");
+    }).join("") || "<p>Cargá movimientos para ver métricas mensuales.</p>", "</div>\n      <div class=\"table-wrap\"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Vs anterior</th><th>Pedidos</th><th>Ticket prom.</th><th>Medio fuerte</th></tr></thead><tbody>").concat(rows.map(function (row) { return "<tr><td>".concat(row.month, "</td><td>").concat(money(row.income), "</td><td>").concat(money(row.expense), "</td><td>").concat(money(row.balance), "</td><td>").concat(row.diff === null ? "-" : "".concat(row.diff, "%"), "</td><td>").concat(row.orders, "</td><td>").concat(money(row.averageTicket), "</td><td>").concat(escapeHtml(row.topMethod), "</td></tr>"); }).join("") || "<tr><td colspan=\"8\">Sin movimientos de caja.</td></tr>", "</tbody></table></div>\n    </div>");
 }
 function renderCash() {
     if (!cashUnlocked) {
@@ -799,9 +824,18 @@ function openOrderStateModal(id) {
         return;
     openModal("Cambiar estado ".concat(escapeHtml(order.number)), "<form class=\"state-grid\">\n    ".concat(STATES.map(function (status) { return "<label class=\"state-option ".concat(status === order.status ? "selected" : "", "\"><input type=\"radio\" name=\"status\" value=\"").concat(status, "\" ").concat(status === order.status ? "checked" : "", " /> <span>").concat(status, "</span></label>"); }).join(""), "\n    <button class=\"primary full\">Guardar estado</button>\n  </form>"), function (form) {
         var data = formDataToObject(form);
+        var previousStatus = order.status;
         order.status = data.status;
-        if (order.status === "Retirado")
+        if (order.status === "Retirado") {
+            order.wasPaidBeforeRetired = order.paymentStatus === "Abonado";
+            order.paymentStatus = "Abonado";
             order.location = "";
+            syncOrderPayment(order);
+        }
+        else if (previousStatus === "Retirado" && !order.wasPaidBeforeRetired) {
+            order.paymentStatus = "Pendiente";
+            syncOrderPayment(order);
+        }
         saveState();
         closeModal();
         render();

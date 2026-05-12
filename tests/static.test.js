@@ -7,7 +7,7 @@ const styles = readFileSync('styles.css', 'utf8');
 const scheduler = readFileSync('scheduler.js', 'utf8');
 const polyfills = readFileSync('polyfills.js', 'utf8');
 
-for (const section of ['Pedidos', 'Clientes', 'Turnos', 'Depósito', 'Caja', 'Caja mensual', 'Config.']) {
+for (const section of ['Pedidos', 'Clientes', 'Turnos', 'Depósito', 'Caja', 'Métricas', 'Config.']) {
   assert.match(html, new RegExp(section), `missing navigation section ${section}`);
 }
 assert.doesNotMatch(html, /data-view="reports"/, 'reports should live inside Caja instead of a separate nav item');
@@ -43,6 +43,8 @@ for (const feature of [
   'importData',
   'itemLineTotal',
   'orderItemsTotal',
+  'orderItemsHtml',
+  'metricInsight',
   'authorizedPickups',
 ]) {
   assert.match(app, new RegExp(feature), `missing app feature ${feature}`);
@@ -71,6 +73,10 @@ assert.match(app, /data-items-total[^\n]+readonly/, 'new order total should be c
 assert.match(app, /clientHistory/, 'clients should expose history action');
 assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks should open read-only order view');
 assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignment');
+assert.match(app, /wasPaidBeforeRetired/, 'retired state should remember previous payment status');
+assert.match(app, /orderItemsHtml/, 'orders should render itemized garments with prices');
+assert.match(app, /metricInsight/, 'metrics should expose owner insights');
+assert.match(app, /Ticket promedio|Medio fuerte|metrics-month-grid/, 'metrics should include monthly comparison insights');
 assert.doesNotMatch(app, /💵|🏦/, 'payment method labels should not include emoji icons');
 assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
 assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
@@ -79,7 +85,7 @@ assert.match(app, /if \(view === "cash"\)[\s\S]{0,40}cashUnlocked = false/, 'cas
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'order-item-line', 'order-items-list']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 

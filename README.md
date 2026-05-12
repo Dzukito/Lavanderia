@@ -34,7 +34,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
 - Caja protegida con clave inicial `1234`, editable desde configuración, ingresos, egresos, efectivo y transferencia; al marcar un pedido como abonado se genera el ingreso correspondiente.
 - Gastos por categorías como agua, luz, gas, insumos, alquiler y otros servicios.
-- Caja diaria protegida por clave cada vez que se entra y comparación mensual en la pantalla separada **Caja mensual**, con tarjetas de ingresos, egresos, saldo, efectivo y transferencia.
+- Caja diaria protegida por clave cada vez que se entra y métricas mensuales en la pantalla **Métricas**, con comparación mes a mes, gráficos simples, ticket promedio, medio fuerte e insights para el dueño.
 - Configuración de horarios, máquinas, ciclos, mensaje de WhatsApp y exportación/importación de datos para moverlos entre navegadores.
 
 ## Flujo diario sugerido
@@ -45,7 +45,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 4. Cambiar el estado con el botón **Estado** y editar datos de pago/observaciones con **Editar**.
 5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.
-7. Revisar caja con la clave del dueño cada vez que se entra; la caja diaria queda separada de **Caja mensual**.
+7. Revisar caja con la clave del dueño cada vez que se entra; la caja diaria queda separada de **Métricas**.
 
 ## Si la pantalla queda en blanco
 

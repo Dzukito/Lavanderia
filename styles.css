@@ -259,3 +259,19 @@ tr:hover td { background: #f8fbff; }
 .machine-assign-form { border-top: 2px solid var(--line); margin-top: 16px; padding-top: 16px; }
 input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 900; }
 @media (max-width: 920px) { .history-item { grid-template-columns: 1fr; } }
+
+.order-items-list { background: #f8fbff; border: 1px solid var(--line); border-radius: 14px; display: grid; gap: 6px; padding: 10px; }
+.order-item-line { align-items: center; display: grid; gap: 8px; grid-template-columns: 1.4fr 1fr auto; }
+.order-item-line small { color: var(--muted); }
+.metrics-month-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 18px; }
+.metric-month-card { background: #fff; border: 2px solid var(--line); border-radius: 20px; padding: 16px; }
+.metric-month-head { align-items: center; display: flex; justify-content: space-between; gap: 12px; }
+.metric-month-head span { color: var(--muted); font-weight: 800; }
+.metric-bars { display: grid; gap: 8px; margin: 12px 0; }
+.metric-bars label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; }
+.metric-bars div { background: #e9eef8; border-radius: 999px; height: 12px; overflow: hidden; }
+.metric-bars .bar { display: block; height: 100%; }
+.metric-bars .cash { background: #4dabf7; }
+.metric-bars .transfer { background: #845ef7; }
+.metric-insights { background: #f8fbff; border-radius: 14px; padding: 10px; }
+.metric-insights p { margin: 4px 0; }
