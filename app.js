@@ -632,7 +632,7 @@ function ordersTable(orders, title) {
     return orderCards(orders, title, false);
 }
 function clientCards(clients) {
-    return clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"secondary\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"secondary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join("") || "<p>No hay clientes para mostrar.</p>";
+    return clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"success\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"primary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join("") || "<p>No hay clientes para mostrar.</p>";
 }
 function filterClients(query) {
     var value = String(query || "").toLowerCase();
@@ -756,7 +756,7 @@ function cashReportHtml() {
     var selected = rows.find(function (row) { return row.month === selectedMetricsMonth; }) || latest;
     var bestBalance = rows.reduce(function (best, row) { return !best || row.balance > best.balance ? row : best; }, null);
     var topClientHtml = (selected.topClients || []).map(function (client, index) {
-        return '<button class="top-client-link" data-action="clientHistory" data-id="'.concat(client.id, '"><span>#').concat(index + 1, '</span><strong>').concat(escapeHtml(client.name), '</strong><small>').concat(client.count, ' pedidos</small></button>');
+        return '<button class="top-client-link" class="success" data-action="clientHistory" data-id="'.concat(client.id, '"><span>#').concat(index + 1, '</span><strong>').concat(escapeHtml(client.name), '</strong><small>').concat(client.count, ' pedidos</small></button>');
     }).join('') || '<p>Sin clientes en este mes.</p>';
     return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Métricas</p><h2>Resumen mensual</h2><p>Elegí un mes para ver ingresos, egresos, margen, clientes fuertes y horas pico.</p></div>'.concat(rows.length ? monthSelectorHtml(rows, selected.month) : '', '</div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos mes elegido</span><strong>').concat(money(selected.income), '</strong><small>Egresos: ').concat(money(selected.expense), '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(selected.margin, '%</strong><small>Saldo: ').concat(money(selected.balance), '</small></article>\n        <article class="mini-metric metric-glow"><span>Total pedidos por mes</span><strong>').concat(selected.orders, '</strong><small>').concat(escapeHtml(selected.month), '</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? escapeHtml(bestBalance.month) : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cerrá caja para comparar', '</small></article>\n      </div>\n      <div class="metrics-focus-grid"><article class="metric-month-card"><h3>Top 3 clientes del mes</h3><div class="top-client-list">').concat(topClientHtml, '</div></article><article class="metric-month-card"><h3>Pedidos por hora</h3>').concat(orderHourLineChart(selected), '</article></div>\n      ').concat(monthlyCashHtml(selected.month), '\n    </div>');
 }
@@ -1002,8 +1002,11 @@ function openOrderStateModal(id) {
             order.number = orderDisplayCode(order);
             syncOrderPayment(order);
         }
-        else if (previousStatus === "Retirado" && !order.wasPaidBeforeRetired) {
-            order.paymentStatus = "Pendiente";
+        else if (previousStatus === "Retirado") {
+            order.location = "";
+            order.number = orderDisplayCode(order);
+            if (!order.wasPaidBeforeRetired)
+                order.paymentStatus = "Pendiente";
             syncOrderPayment(order);
         }
         saveState();
