@@ -79,7 +79,8 @@ assert.match(app, /data-items-list/, 'new order should include manual item rows'
 assert.match(app, /itemQuantity/, 'new order should allow item quantities');
 assert.match(app, /data-items-total[^\n]+readonly/, 'new order total should be calculated read-only');
 assert.match(app, /data-client-autocomplete[\s\S]*datalist[\s\S]*clientIdFromInput/, 'new orders should use client autocomplete instead of a huge select');
-assert.match(app, /orderDisplayCode[\s\S]*prefix, "#"[\s\S]*R/, 'orders without deposit should use R# codes without hyphen');
+assert.match(app, /orderDisplayCode[\s\S]*Retirado[\s\S]*R#[\s\S]*Sin dep/, 'only retired orders should use R# while active no-deposit orders show Sin depósito');
+assert.doesNotMatch(app, /if \(hidden && hidden\.value\)[\s\S]{0,80}return Number\(hidden\.value\)/, 'client autocomplete should not reuse a stale hidden client after text changes');
 assert.match(app, /clientHistory/, 'clients should expose history action');
 assert.match(app, /data-search-clients|filterClients/, 'clients should include search');
 assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks should open read-only order view');
@@ -89,7 +90,7 @@ assert.match(app, /orderItemsHtml/, 'orders should render itemized garments with
 assert.doesNotMatch(app, /escapeHtml\(itemSummary\(order\)\).*formatDateTime/, 'order header should not duplicate item summary above item list');
 assert.match(app, /data-metrics-month/, 'metrics should allow selecting any month');
 assert.match(app, /top-client-link[\s\S]*clientHistory|clientHistory[\s\S]*Top 3 clientes del mes/, 'metrics should link top clients to histories');
-assert.match(app, /orderHourLineChart[\s\S]*polyline/, 'metrics should include a line chart of orders by hour');
+assert.match(app, /orderHourLineChart[\s\S]*yTicks[\s\S]*polyline/, 'metrics should include a line chart of orders by hour with Y-axis counts');
 assert.match(app, /Mejor mes histórico[\s\S]*monthlyCashHtml/, 'metrics should include best historical month and monthly cash');
 assert.match(app, /counts\.map[\s\S]*hour-axis-labels/, 'hour chart should render all hours on the x axis');
 assert.doesNotMatch(app, /Idea:|Objetivo:|pie-chart|pieStyle/, 'metrics should not include idea/objective labels or pie charts');
@@ -112,7 +113,7 @@ assert.match(app, /if \(view === "cash" \|\| view === "cashReports"\)[\s\S]{0,80
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 

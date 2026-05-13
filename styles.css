@@ -312,9 +312,14 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .top-client-link { align-items: center; background: #f8fbff; border: 1px solid var(--line); border-radius: 14px; color: var(--text); display: grid; gap: 4px; grid-template-columns: auto 1fr; min-height: 58px; padding: 10px; text-align: left; }
 .top-client-link span { background: var(--primary); border-radius: 999px; color: #fff; font-weight: 900; padding: 5px 8px; }
 .top-client-link small { color: var(--muted); grid-column: 2; }
-.hour-line-chart svg { background: linear-gradient(180deg, #f8fbff, #fff); border: 1px solid var(--line); border-radius: 16px; height: 210px; width: 100%; }
-.hour-line-chart line { stroke: #c8d4e8; stroke-width: 2; }
-.hour-line-chart polyline { fill: none; stroke: var(--primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 5; }
+.hour-chart-wrap { position: relative; }
+.y-axis-title { color: var(--muted); font-size: 12px; font-weight: 900; left: 10px; position: absolute; top: 6px; }
+.hour-line-chart svg { background: linear-gradient(180deg, #f8fbff, #fff); border: 1px solid var(--line); border-radius: 16px; height: 230px; width: 100%; }
+.hour-line-chart .axis-line { stroke: #98a8bd; stroke-width: 2; }
+.hour-line-chart .grid-line { stroke: #e2e8f0; stroke-width: 1; }
+.hour-line-chart text { fill: var(--muted); font-size: 12px; font-weight: 800; }
+.hour-line-chart polyline { fill: none; stroke: var(--primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
+.hour-points circle { fill: #fff; stroke: var(--primary); stroke-width: 3; }
 .hour-chart-labels { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .hour-chart-labels span { background: #eef4ff; border-radius: 999px; color: var(--primary-dark); font-weight: 800; padding: 7px 10px; }
 .history-toggle { cursor: pointer; display: inline-flex; list-style: none; margin-bottom: 12px; }

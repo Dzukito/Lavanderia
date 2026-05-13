@@ -24,7 +24,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 ## Funciones incluidas
 
 - Clientes con nombre, teléfono, dirección, notas, botón de historial de pedidos y personas autorizadas a retirar.
-- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si el pedido queda sin depósito o se retira, usa formato `R#1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
+- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
 - Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.

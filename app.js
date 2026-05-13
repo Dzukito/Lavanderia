@@ -400,14 +400,30 @@ function monthlyCashHtml(month) {
 function orderHourLineChart(row) {
     var counts = row.hourlyCounts || emptyHourlyCounts();
     var max = counts.reduce(function (best, item) { return Math.max(best, item.count); }, 1);
+    var chartTop = 24;
+    var chartBottom = 150;
+    var chartLeft = 48;
+    var chartRight = 584;
     var points = counts.map(function (item, index) {
-        var x = 20 + index * (560 / 23);
-        var y = 150 - (item.count / max) * 120;
+        var x = chartLeft + index * ((chartRight - chartLeft) / 23);
+        var y = chartBottom - (item.count / max) * (chartBottom - chartTop);
         return Math.round(x) + "," + Math.round(y);
     }).join(" ");
-    var labels = counts.filter(function (item) { return item.count > 0; }).map(function (item, index) { return '<span><strong>'.concat(escapeHtml(item.label), '</strong>').concat(item.count, '</span>'); }).join('') || '<span>Sin pedidos en este mes.</span>';
+    var yTicks = [];
+    for (var tick = 0; tick <= 4; tick += 1) {
+        var value = Math.round((max / 4) * tick);
+        var y = chartBottom - (value / max) * (chartBottom - chartTop);
+        yTicks.push({ value: value, y: Math.round(y) });
+    }
+    var yLines = yTicks.map(function (tick) { return '<g><line class="grid-line" x1="'.concat(chartLeft, '" y1="').concat(tick.y, '" x2="').concat(chartRight, '" y2="').concat(tick.y, '"></line><text x="8" y="').concat(tick.y + 4, '">').concat(tick.value, '</text></g>'); }).join("");
+    var dots = counts.map(function (item, index) {
+        var x = chartLeft + index * ((chartRight - chartLeft) / 23);
+        var y = chartBottom - (item.count / max) * (chartBottom - chartTop);
+        return '<circle cx="'.concat(Math.round(x), '" cy="').concat(Math.round(y), '" r="').concat(item.count ? 4 : 2, '"><title>').concat(escapeHtml(item.label), ': ').concat(item.count, ' pedidos</title></circle>');
+    }).join("");
+    var labels = counts.filter(function (item) { return item.count > 0; }).map(function (item) { return '<span><strong>'.concat(escapeHtml(item.label), '</strong>').concat(item.count, '</span>'); }).join('') || '<span>Sin pedidos en este mes.</span>';
     var xLabels = counts.map(function (item) { return "<span>" + escapeHtml(item.label) + "</span>"; }).join("");
-    return '<div class="hour-line-chart"><svg viewBox="0 0 600 180" role="img" aria-label="Pedidos por hora"><line x1="20" y1="150" x2="580" y2="150"></line><line x1="20" y1="20" x2="20" y2="150"></line><polyline points="'.concat(points, '"></polyline></svg><div class="hour-axis-labels">').concat(xLabels, '</div><div class="hour-chart-labels">').concat(labels, '</div></div>');
+    return '<div class="hour-line-chart"><div class="hour-chart-wrap"><span class="y-axis-title">Pedidos</span><svg viewBox="0 0 600 180" role="img" aria-label="Pedidos por hora"><g class="y-axis-labels">'.concat(yLines, '</g><line class="axis-line" x1="').concat(chartLeft, '" y1="').concat(chartBottom, '" x2="').concat(chartRight, '" y2="').concat(chartBottom, '"></line><line class="axis-line" x1="').concat(chartLeft, '" y1="').concat(chartTop, '" x2="').concat(chartLeft, '" y2="').concat(chartBottom, '"></line><polyline points="').concat(points, '"></polyline><g class="hour-points">').concat(dots, '</g></svg></div><div class="hour-axis-labels">').concat(xLabels, '</div><div class="hour-chart-labels">').concat(labels, '</div></div>');
 }
 function monthSelectorHtml(rows, selectedMonth) {
     return '<label>Ver mes<select data-metrics-month>'.concat(rows.map(function (row) { return '<option value="'.concat(escapeHtml(row.month), '" ').concat(row.month === selectedMonth ? 'selected' : '', '>').concat(escapeHtml(row.month), '</option>'); }).join(''), '</select></label>');
@@ -524,8 +540,11 @@ document.addEventListener("change", function (event) {
         priceInput.value = selected.getAttribute("data-price");
 });
 function orderDisplayCode(order) {
-    var prefix = order.location || "R";
-    return "".concat(prefix, "#").concat(String(order.id).padStart(4, "0"));
+    if (order.status === "Retirado")
+        return "R#" + String(order.id).padStart(4, "0");
+    if (!order.location)
+        return "Sin depósito";
+    return "".concat(order.location, "#").concat(String(order.id).padStart(4, "0"));
 }
 function itemLineTotal(item) {
     return Number(item.price || 0) * Number(item.quantity || 1);
@@ -805,9 +824,6 @@ function openClientModal(id) {
 }
 function clientIdFromInput(form) {
     var input = form.querySelector("[data-client-autocomplete]");
-    var hidden = form.querySelector('[name="clientId"]');
-    if (hidden && hidden.value)
-        return Number(hidden.value);
     var value = input ? input.value : "";
     var normalized = value.toLowerCase();
     var matchedClientId = 0;
@@ -829,7 +845,17 @@ function attachClientAutocomplete(modal) {
     var hidden = modal.querySelector('[name="clientId"]');
     if (!input || !hidden)
         return;
-    input.addEventListener("input", function () { hidden.value = clientIdFromInput(modal) || ""; });
+    input.addEventListener("input", function () {
+        hidden.value = "";
+        var value = input.value;
+        for (var index = 0; index < state.clients.length; index += 1) {
+            var client = state.clients[index];
+            if (value === client.name + " · " + client.phone) {
+                hidden.value = client.id;
+                return;
+            }
+        }
+    });
 }
 function openOrderModal() {
     var defaultLocation = nextFreeLocation();
