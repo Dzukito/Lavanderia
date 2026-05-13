@@ -19,12 +19,12 @@ Luego abrir `http://localhost:8080`.
 
 ## Importante sobre navegadores y datos
 
-Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Firefox y Edge no comparten ese almacenamiento entre sí, y cada perfil/ruta local puede tener un espacio separado. Si cargás pedidos en Chrome y abrís el mismo `index.html` en Firefox o Edge, cada navegador tendrá su propia caja y pedidos. Para respaldo contable, usá **Caja → Exportar Excel histórico**, que descarga un archivo `.xls` compatible con Excel en la carpeta de descargas configurada del navegador.
+Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Firefox y Edge no comparten ese almacenamiento entre sí, y cada perfil/ruta local puede tener un espacio separado. Si cargás pedidos en Chrome y abrís el mismo `index.html` en Firefox o Edge, cada navegador tendrá su propia caja y pedidos. Para respaldo contable, usá **Caja → Exportar CSV para Excel**, que descarga un archivo `.csv` compatible con Excel en la carpeta de descargas configurada del navegador.
 
 ## Funciones incluidas
 
 - Clientes con nombre, teléfono, dirección, notas, botón de historial de pedidos y personas autorizadas a retirar.
-- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2 - 1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
+- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si el pedido queda sin depósito o se retira, usa formato `R#1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
 - Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.
@@ -34,7 +34,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
 - Caja protegida con clave inicial `1234`, editable desde configuración, ingresos, egresos, efectivo y transferencia; al marcar un pedido como abonado se genera el ingreso correspondiente, y cada movimiento diario puede borrarse si se cargó mal.
 - Gastos por categorías como agua, luz, gas, insumos, alquiler y otros servicios.
-- Caja diaria protegida por clave cada vez que se entra, botón visible para **Empezar nuevo día** que archiva la caja actual en caja histórica, exportación Excel del histórico y métricas mensuales protegidas con clave propia editable, inicial `1111`, selector de mes, top 3 clientes, gráfico lineal de pedidos por hora, mejor mes histórico y caja histórica visible.
+- Caja diaria protegida por clave cada vez que se entra, botón visible para **Empezar nuevo día** que archiva la caja actual en caja histórica, exportación CSV del histórico y métricas mensuales protegidas con clave propia editable, inicial `1111`, selector de mes, top 3 clientes, gráfico lineal de pedidos por hora, mejor mes histórico y caja mensual visible en el sistema.
 - Configuración de horarios, máquinas, ciclos, mensajes de WhatsApp, clave de caja y clave de métricas.
 
 ## Flujo diario sugerido
@@ -45,7 +45,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 4. Cambiar el estado con el botón **Estado** y editar prendas, precios, datos de pago y observaciones con **Editar**.
 5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.
-7. Revisar caja con la clave del dueño cada vez que se entra; al cerrar el día tocar **Empezar nuevo día** para pasar los movimientos al histórico y poder exportarlo desde **Caja → Exportar Excel histórico**.
+7. Revisar caja con la clave del dueño cada vez que se entra; al cerrar el día tocar **Empezar nuevo día** para pasar los movimientos al histórico y poder exportarlo desde **Caja → Exportar CSV para Excel**.
 
 ## Si la pantalla queda en blanco
 

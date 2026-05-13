@@ -393,9 +393,9 @@ function historicalCashRows() {
     rows.sort(function (a, b) { return new Date(b.closedAt || b.date) - new Date(a.closedAt || a.date); });
     return rows;
 }
-function historicalCashHtml() {
-    var rows = historicalCashRows();
-    return '<details class="historical-cash-panel"><summary class="secondary history-toggle">Ver caja histórica</summary><div class="toolbar compact-toolbar"><h3>Caja histórica archivada</h3><button class="secondary" data-action="exportHistoricalCash">Exportar Excel histórico</button></div><div class="table-wrap"><table class="cash-history-table"><thead><tr><th>Cierre</th><th>Movimiento</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(rows.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.closedAt), '</td><td>').concat(formatDateTime(entry.date), '</td><td>').concat(escapeHtml(entry.type), '</td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td class="').concat(signedCashAmount(entry) < 0 ? 'negative-amount' : '', '">').concat(moneySigned(signedCashAmount(entry)), '</td></tr>'); }).join('') || '<tr><td colspan="7">Todavía no hay cierres diarios archivados.</td></tr>', '</tbody></table></div></details>');
+function monthlyCashHtml(month) {
+    var rows = historicalCashRows().filter(function (entry) { return monthKey(entry.date) === month; });
+    return '<details class="monthly-cash-panel"><summary class="secondary history-toggle">Ver caja mensual</summary><div class="toolbar compact-toolbar"><h3>Caja mensual ' + escapeHtml(month || "sin mes") + '</h3><button class="secondary" data-action="exportHistoricalCash">Exportar histórico global CSV</button></div><div class="table-wrap"><table class="cash-history-table"><thead><tr><th>Cierre</th><th>Movimiento</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(rows.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.closedAt), '</td><td>').concat(formatDateTime(entry.date), '</td><td>').concat(escapeHtml(entry.type), '</td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td class="').concat(signedCashAmount(entry) < 0 ? 'negative-amount' : '', '">').concat(moneySigned(signedCashAmount(entry)), '</td></tr>'); }).join('') || '<tr><td colspan="7">No hay caja archivada para este mes.</td></tr>', '</tbody></table></div></details>');
 }
 function orderHourLineChart(row) {
     var counts = row.hourlyCounts || emptyHourlyCounts();
@@ -406,7 +406,8 @@ function orderHourLineChart(row) {
         return Math.round(x) + "," + Math.round(y);
     }).join(" ");
     var labels = counts.filter(function (item) { return item.count > 0; }).map(function (item, index) { return '<span><strong>'.concat(escapeHtml(item.label), '</strong>').concat(item.count, '</span>'); }).join('') || '<span>Sin pedidos en este mes.</span>';
-    return '<div class="hour-line-chart"><svg viewBox="0 0 600 180" role="img" aria-label="Pedidos por hora"><line x1="20" y1="150" x2="580" y2="150"></line><line x1="20" y1="20" x2="20" y2="150"></line><polyline points="'.concat(points, '"></polyline></svg><div class="hour-chart-labels">').concat(labels, '</div></div>');
+    var xLabels = counts.map(function (item) { return "<span>" + escapeHtml(item.label) + "</span>"; }).join("");
+    return '<div class="hour-line-chart"><svg viewBox="0 0 600 180" role="img" aria-label="Pedidos por hora"><line x1="20" y1="150" x2="580" y2="150"></line><line x1="20" y1="20" x2="20" y2="150"></line><polyline points="'.concat(points, '"></polyline></svg><div class="hour-axis-labels">').concat(xLabels, '</div><div class="hour-chart-labels">').concat(labels, '</div></div>');
 }
 function monthSelectorHtml(rows, selectedMonth) {
     return '<label>Ver mes<select data-metrics-month>'.concat(rows.map(function (row) { return '<option value="'.concat(escapeHtml(row.month), '" ').concat(row.month === selectedMonth ? 'selected' : '', '>').concat(escapeHtml(row.month), '</option>'); }).join(''), '</select></label>');
@@ -420,7 +421,7 @@ function messageForOrder(order, type) {
     var isPaid = order.paymentStatus === "Abonado";
     var unpaidText = type === "ready" ? "Para retirar, el total a pagar es ".concat(money(order.total), ".") : "Queda pendiente de pago ".concat(money(order.total), ".");
     var paymentText = isPaid ? "Ya figura pago por ".concat(order.paymentMethod || "medio registrado", ".") : unpaidText;
-    return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", order.number || order.location || ""), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
+    return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", orderDisplayCode(order)), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
 }
 function safeRenderView(id, callback) {
     try {
@@ -483,6 +484,7 @@ document.addEventListener("click", function (event) {
         saveMachineSlot: function () { return saveMachineSlot(target); },
         cashIncome: function () { return openCashModal("Ingreso"); },
         cashExpense: function () { return openCashModal("Egreso"); },
+        openDeleteCashModal: openDeleteCashModal,
         deleteCashEntry: function () { return deleteCashEntry(id); },
         closeCashDay: closeCashDay,
         exportHistoricalCash: exportHistoricalCash,
@@ -522,7 +524,8 @@ document.addEventListener("change", function (event) {
         priceInput.value = selected.getAttribute("data-price");
 });
 function orderDisplayCode(order) {
-    return order.location ? "".concat(order.location, "-#").concat(String(order.id).padStart(4, "0")) : "Sin dep\u00F3sito-#".concat(String(order.id).padStart(4, "0"));
+    var prefix = order.location || "R";
+    return "".concat(prefix, "#").concat(String(order.id).padStart(4, "0"));
 }
 function itemLineTotal(item) {
     return Number(item.price || 0) * Number(item.quantity || 1);
@@ -596,7 +599,7 @@ window.filterOrders = function (query, date) {
     if (date === void 0) { date = ""; }
     var q = query.toLowerCase();
     var filtered = state.orders.filter(function (order) {
-        var matchesQuery = "".concat(order.number, " ").concat(order.location || "", " ").concat(orderClient(order), " ").concat((getClient(order.clientId) && getClient(order.clientId).phone) || "", " ").concat(order.status, " ").concat(order.notes || "").toLowerCase().includes(q);
+        var matchesQuery = "".concat(order.number, " ").concat(order.location || "", " ").concat(orderClient(order), " ").concat(orderDisplayCode(order), " ").concat((getClient(order.clientId) && getClient(order.clientId).phone) || "", " ").concat(order.status, " ").concat(order.notes || "").toLowerCase().includes(q);
         var matchesDate = !date || dateKey(order.createdAt) === date;
         return matchesQuery && matchesDate;
     });
@@ -712,7 +715,7 @@ function renderStorage() {
     document.getElementById("storage").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Dep\u00F3sito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hac\u00E9 clic en una ubicaci\u00F3n ocupada para abrir el pedido correspondiente.</p></div><button class=\"secondary\" data-action=\"storageNotice\">Ver aviso general</button></div>\n    <div class=\"storage-grid\">".concat(state.locations.map(function (location) {
         var order = occupied[location.code];
         return order
-            ? "<button class=\"location busy location-button\" data-action=\"openStorageOrder\" data-id=\"".concat(order.id, "\"><h3>").concat(escapeHtml(location.code), "</h3><strong>#").concat(escapeHtml(order.number), "</strong><span>").concat(escapeHtml(orderClient(order)), "</span><small>").concat(escapeHtml(order.status), "</small></button>")
+            ? "<button class=\"location busy location-button\" data-action=\"openStorageOrder\" data-id=\"".concat(order.id, "\"><h3>").concat(escapeHtml(location.code), "</h3><strong>").concat(escapeHtml(orderDisplayCode(order)), "</strong><span>").concat(escapeHtml(orderClient(order)), "</span><small>").concat(escapeHtml(order.status), "</small></button>")
             : "<article class=\"location free\"><h3>".concat(escapeHtml(location.code), "</h3>Libre</article>");
     }).join(""), "</div>");
 }
@@ -721,8 +724,8 @@ function openStorageOrder(id) {
     var input = document.getElementById("orderSearch");
     var order = getOrder(id);
     if (input && order) {
-        input.value = order.number;
-        filterOrders(order.number);
+        input.value = orderDisplayCode(order);
+        filterOrders(orderDisplayCode(order));
     }
     openOrderViewModal(id);
 }
@@ -736,7 +739,7 @@ function cashReportHtml() {
     var topClientHtml = (selected.topClients || []).map(function (client, index) {
         return '<button class="top-client-link" data-action="clientHistory" data-id="'.concat(client.id, '"><span>#').concat(index + 1, '</span><strong>').concat(escapeHtml(client.name), '</strong><small>').concat(client.count, ' pedidos</small></button>');
     }).join('') || '<p>Sin clientes en este mes.</p>';
-    return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Métricas</p><h2>Resumen mensual</h2><p>Elegí un mes para ver ingresos, egresos, margen, clientes fuertes y horas pico.</p></div>'.concat(rows.length ? monthSelectorHtml(rows, selected.month) : '', '</div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos mes elegido</span><strong>').concat(money(selected.income), '</strong><small>Egresos: ').concat(money(selected.expense), '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(selected.margin, '%</strong><small>Saldo: ').concat(money(selected.balance), '</small></article>\n        <article class="mini-metric metric-glow"><span>Total pedidos por mes</span><strong>').concat(selected.orders, '</strong><small>').concat(escapeHtml(selected.month), '</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? escapeHtml(bestBalance.month) : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cerrá caja para comparar', '</small></article>\n      </div>\n      <div class="metrics-focus-grid"><article class="metric-month-card"><h3>Top 3 clientes del mes</h3><div class="top-client-list">').concat(topClientHtml, '</div></article><article class="metric-month-card"><h3>Pedidos por hora</h3>').concat(orderHourLineChart(selected), '</article></div>\n      ').concat(historicalCashHtml(), '\n    </div>');
+    return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Métricas</p><h2>Resumen mensual</h2><p>Elegí un mes para ver ingresos, egresos, margen, clientes fuertes y horas pico.</p></div>'.concat(rows.length ? monthSelectorHtml(rows, selected.month) : '', '</div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos mes elegido</span><strong>').concat(money(selected.income), '</strong><small>Egresos: ').concat(money(selected.expense), '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(selected.margin, '%</strong><small>Saldo: ').concat(money(selected.balance), '</small></article>\n        <article class="mini-metric metric-glow"><span>Total pedidos por mes</span><strong>').concat(selected.orders, '</strong><small>').concat(escapeHtml(selected.month), '</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? escapeHtml(bestBalance.month) : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cerrá caja para comparar', '</small></article>\n      </div>\n      <div class="metrics-focus-grid"><article class="metric-month-card"><h3>Top 3 clientes del mes</h3><div class="top-client-list">').concat(topClientHtml, '</div></article><article class="metric-month-card"><h3>Pedidos por hora</h3>').concat(orderHourLineChart(selected), '</article></div>\n      ').concat(monthlyCashHtml(selected.month), '\n    </div>');
 }
 function renderCash() {
     if (!cashUnlocked) {
@@ -747,7 +750,7 @@ function renderCash() {
     var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount); }, 0);
     var cash = state.cash.filter(function (entry) { return entry.method === "Efectivo"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
     var transfer = state.cash.filter(function (entry) { return entry.method === "Transferencia"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
-    document.getElementById("cash").innerHTML = '\n    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>'.concat(money(income), '</strong></article><article class="card metric"><span>Egresos</span><strong>').concat(money(expense), '</strong></article><article class="card metric"><span>Efectivo</span><strong>').concat(money(cash), '</strong></article><article class="card metric"><span>Transferencia</span><strong>').concat(money(transfer), '</strong></article></div>\n    <div class="card cash-day-hero"><div><p class="eyebrow-dark">Cierre diario</p><h2>Empezar nuevo día</h2><p>Guarda todos los movimientos actuales en la caja histórica y deja la caja diaria en cero.</p></div><button class="danger big-action new-day-button" data-action="closeCashDay">Empezar nuevo día</button></div>\n    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button><button class="secondary" data-action="exportHistoricalCash">Exportar Excel histórico</button></div></div>').concat(cashTable(), '</div>');
+    document.getElementById("cash").innerHTML = '\n    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>'.concat(money(income), '</strong></article><article class="card metric"><span>Egresos</span><strong>').concat(money(expense), '</strong></article><article class="card metric"><span>Efectivo</span><strong>').concat(money(cash), '</strong></article><article class="card metric"><span>Transferencia</span><strong>').concat(money(transfer), '</strong></article></div>\n    <div class="card cash-day-hero"><div><p class="eyebrow-dark">Cierre diario</p><h2>Empezar nuevo día</h2><p>Guarda todos los movimientos actuales en la caja histórica y deja la caja diaria en cero.</p></div><button class="danger big-action new-day-button" data-action="closeCashDay">Empezar nuevo día</button></div>\n    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button><button class="secondary" data-action="openDeleteCashModal">Borrar movimiento</button><button class="secondary" data-action="exportHistoricalCash">Exportar CSV para Excel</button></div></div>').concat(cashTable(), '</div>');
 }
 function cashTable() {
     var entries = __spreadArray([], state.cash, true).sort(function (a, b) {
@@ -758,7 +761,7 @@ function cashTable() {
     var income = state.cash.filter(function (entry) { return entry.type === "Ingreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
     var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount || 0); }, 0);
     var balance = income - expense;
-    return '<div class="table-wrap"><table class="cash-movements-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th><th>Acciones</th></tr></thead><tbody>'.concat(entries.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.date), '</td><td><span class="cash-type-badge ').concat(entry.type === "Ingreso" ? "income" : "expense", '">').concat(escapeHtml(entry.type), '</span></td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td>').concat(money(entry.amount), '</td><td><button class="cash-delete-link" title="Borrar movimiento" data-action="deleteCashEntry" data-id="').concat(entry.id, '">×</button></td></tr>'); }).join('') || '<tr><td colspan="7">Sin movimientos.</td></tr>', '</tbody><tfoot><tr><th colspan="6">Total ingresos</th><th>').concat(money(income), '</th></tr><tr><th colspan="6">Total egresos</th><th>').concat(money(expense), '</th></tr><tr><th colspan="6">Saldo final</th><th>').concat(money(balance), '</th></tr></tfoot></table></div>');
+    return '<div class="table-wrap"><table class="cash-movements-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(entries.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.date), '</td><td><span class="cash-type-badge ').concat(entry.type === "Ingreso" ? "income" : "expense", '">').concat(escapeHtml(entry.type), '</span></td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td>').concat(money(entry.amount), '</td></tr>'); }).join('') || '<tr><td colspan="6">Sin movimientos.</td></tr>', '</tbody><tfoot><tr><th colspan="5">Total ingresos</th><th>').concat(money(income), '</th></tr><tr><th colspan="5">Total egresos</th><th>').concat(money(expense), '</th></tr><tr><th colspan="5">Saldo final</th><th>').concat(money(balance), '</th></tr></tfoot></table></div>');
 }
 function renderCashReports() {
     if (!cashUnlocked) {
@@ -800,11 +803,44 @@ function openClientModal(id) {
         render();
     });
 }
+function clientIdFromInput(form) {
+    var input = form.querySelector("[data-client-autocomplete]");
+    var hidden = form.querySelector('[name="clientId"]');
+    if (hidden && hidden.value)
+        return Number(hidden.value);
+    var value = input ? input.value : "";
+    var normalized = value.toLowerCase();
+    var matchedClientId = 0;
+    var matchCount = 0;
+    for (var index = 0; index < state.clients.length; index += 1) {
+        var client = state.clients[index];
+        var label = client.name + " · " + client.phone;
+        if (value === label)
+            return client.id;
+        if (normalized && label.toLowerCase().indexOf(normalized) !== -1) {
+            matchedClientId = client.id;
+            matchCount += 1;
+        }
+    }
+    return matchCount === 1 ? matchedClientId : 0;
+}
+function attachClientAutocomplete(modal) {
+    var input = modal.querySelector("[data-client-autocomplete]");
+    var hidden = modal.querySelector('[name="clientId"]');
+    if (!input || !hidden)
+        return;
+    input.addEventListener("input", function () { hidden.value = clientIdFromInput(modal) || ""; });
+}
 function openOrderModal() {
     var defaultLocation = nextFreeLocation();
     var firstService = state.services[0];
-    var modal = openModal("Nuevo pedido", "<form class=\"form-grid\">\n    <label>Cliente<select name=\"clientId\" required>".concat(state.clients.map(function (client) { return "<option value=\"".concat(client.id, "\">").concat(escapeHtml(client.name), " · ").concat(escapeHtml(client.phone), "</option>"); }).join(""), "</select></label>\n    <label>Depósito<select name=\"location\" required>").concat(availableLocations().map(function (location) { return "<option ".concat(location.code === defaultLocation ? "selected" : "", ">").concat(escapeHtml(location.code), "</option>"); }).join(""), "</select></label>\n    <label>Pago<select name=\"paymentStatus\"><option>Pendiente</option><option>Abonado</option></select></label>\n    <label>Medio de pago<select name=\"paymentMethod\"><option value=\"Efectivo\">Efectivo</option><option value=\"Transferencia\">Transferencia</option></select></label>\n    <div class=\"full items-builder\"><h3>Prendas / trabajos</h3><div data-items-list>\n      ").concat(orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, "", 1), "\n    </div><button class=\"secondary\" type=\"button\" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name=\"total\" data-items-total type=\"number\" min=\"0\" readonly value=\"").concat((firstService && firstService.price) || 0, "\" /></label>\n    <label class=\"full\">Observaciones<textarea name=\"notes\" placeholder=\"Ej: Frasada polar roja, manchas, preferencias...\"></textarea></label>\n    <button class=\"primary full\">Crear pedido</button>\n  </form>"), function (form) {
+    var modal = openModal("Nuevo pedido", '<form class="form-grid">\n    <label class="full">Cliente<input name="clientSearch" data-client-autocomplete list="clientOptions" placeholder="Escribí nombre o teléfono" required /><input name="clientId" type="hidden" /><datalist id="clientOptions">'.concat(state.clients.map(function (client) { return '<option value="'.concat(escapeHtml(client.name), ' · ').concat(escapeHtml(client.phone), '" data-id="').concat(client.id, '"></option>'); }).join(''), '</datalist></label>\n    <label>Depósito<select name="location" required>').concat(availableLocations().map(function (location) { return '<option '.concat(location.code === defaultLocation ? 'selected' : '', '>').concat(escapeHtml(location.code), '</option>'); }).join(''), '</select></label>\n    <label>Pago<select name="paymentStatus"><option>Pendiente</option><option>Abonado</option></select></label>\n    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option></select></label>\n    <div class="full items-builder"><h3>Prendas / trabajos</h3><div data-items-list>\n      ').concat(orderItemRow((firstService && firstService.id) || 1, (firstService && firstService.price) || 0, "", 1), '\n    </div><button class="secondary" type="button" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name="total" data-items-total type="number" min="0" readonly value="').concat((firstService && firstService.price) || 0, '" /></label>\n    <label class="full">Observaciones<textarea name="notes" placeholder="Ej: Frasada polar roja, manchas, preferencias..."></textarea></label>\n    <button class="primary full">Crear pedido</button>\n  </form>'), function (form) {
         var data = formDataToObject(form);
+        var selectedClientId = clientIdFromInput(form);
+        if (!selectedClientId) {
+            alert("Elegí un cliente válido de la lista.");
+            return;
+        }
         var createdAt = new Date().toISOString();
         var items = collectItems(form);
         var primaryService = getService((items[0] && items[0].serviceId) || (firstService && firstService.id));
@@ -812,7 +848,8 @@ function openOrderModal() {
         var orderId = nextId(state.orders);
         var location = data.location || nextFreeLocation();
         var total = orderItemsTotal(items);
-        var order = { id: orderId, number: "".concat(location, "-#").concat(String(orderId).padStart(4, "0")), clientId: Number(data.clientId), serviceId: Number(primaryService.id), createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+        var order = { id: orderId, number: "", clientId: Number(selectedClientId), serviceId: Number(primaryService.id), createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+        order.number = orderDisplayCode(order);
         state.orders.push(order);
         if (order.paymentStatus === "Abonado")
             syncOrderPayment(order);
@@ -820,6 +857,7 @@ function openOrderModal() {
         closeModal();
         render();
     });
+    attachClientAutocomplete(modal);
     attachItemBuilder(modal);
 }
 function orderItemRow(serviceId, price, name, quantity) {
@@ -904,7 +942,7 @@ function openOrderEditModal(id) {
     var locations = availableLocations(order.id);
     if (order.location && !locations.some(function (location) { return location.code === order.location; }))
         locations.unshift({ id: 0, code: order.location });
-    var modal = openModal("Editar pedido ".concat(escapeHtml(order.number)), '<form class="form-grid">\n    <label>Depósito / número<select name="location"><option value="">Sin asignar</option>'.concat(locations.map(function (location) { return '<option '.concat(location.code === order.location ? 'selected' : '', '>').concat(escapeHtml(location.code), '</option>'); }).join(''), '</select></label>\n    <label>Pago<select name="paymentStatus"><option ').concat(order.paymentStatus !== "Abonado" ? 'selected' : '', '>Pendiente</option><option ').concat(order.paymentStatus === "Abonado" ? 'selected' : '', '>Abonado</option></select></label>\n    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo" ').concat(order.paymentMethod !== "Transferencia" ? 'selected' : '', '>Efectivo</option><option value="Transferencia" ').concat(order.paymentMethod === "Transferencia" ? 'selected' : '', '>Transferencia</option></select></label>\n    <div class="full items-builder"><h3>Prendas / trabajos</h3><div data-items-list>').concat((order.items || []).map(function (item) { return orderItemRow(item.serviceId, item.price, item.name, item.quantity); }).join('') || orderItemRow(state.services[0].id, state.services[0].price, '', 1), '</div><button class="secondary" type="button" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name="total" data-items-total type="number" min="0" readonly value="').concat(Number(order.total || 0), '" /></label>\n    <label class="full">Observaciones<textarea name="notes">').concat(escapeHtml(order.notes || ""), '</textarea></label>\n    <button class="primary full">Guardar cambios</button>\n  </form>'), function (form) {
+    var modal = openModal("Editar pedido ".concat(escapeHtml(orderDisplayCode(order))), '<form class="form-grid">\n    <label>Depósito / número<select name="location"><option value="">Sin asignar</option>'.concat(locations.map(function (location) { return '<option '.concat(location.code === order.location ? 'selected' : '', '>').concat(escapeHtml(location.code), '</option>'); }).join(''), '</select></label>\n    <label>Pago<select name="paymentStatus"><option ').concat(order.paymentStatus !== "Abonado" ? 'selected' : '', '>Pendiente</option><option ').concat(order.paymentStatus === "Abonado" ? 'selected' : '', '>Abonado</option></select></label>\n    <label>Medio de pago<select name="paymentMethod"><option value="Efectivo" ').concat(order.paymentMethod !== "Transferencia" ? 'selected' : '', '>Efectivo</option><option value="Transferencia" ').concat(order.paymentMethod === "Transferencia" ? 'selected' : '', '>Transferencia</option></select></label>\n    <div class="full items-builder"><h3>Prendas / trabajos</h3><div data-items-list>').concat((order.items || []).map(function (item) { return orderItemRow(item.serviceId, item.price, item.name, item.quantity); }).join('') || orderItemRow(state.services[0].id, state.services[0].price, '', 1), '</div><button class="secondary" type="button" data-add-item>+ Agregar prenda</button></div>\n    <label>Precio total<input name="total" data-items-total type="number" min="0" readonly value="').concat(Number(order.total || 0), '" /></label>\n    <label class="full">Observaciones<textarea name="notes">').concat(escapeHtml(order.notes || ""), '</textarea></label>\n    <button class="primary full">Guardar cambios</button>\n  </form>'), function (form) {
         var data = formDataToObject(form);
         var items = collectItems(form);
         var primaryService = getService((items[0] && items[0].serviceId) || order.serviceId);
@@ -927,7 +965,7 @@ function openOrderStateModal(id) {
     var order = getOrder(id);
     if (!order)
         return;
-    openModal("Cambiar estado ".concat(escapeHtml(order.number)), "<form class=\"state-grid\">\n    ".concat(STATES.map(function (status) { return "<label class=\"state-option ".concat(status === order.status ? "selected" : "", "\"><input type=\"radio\" name=\"status\" value=\"").concat(status, "\" ").concat(status === order.status ? "checked" : "", " /> <span>").concat(status, "</span></label>"); }).join(""), "\n    <button class=\"primary full\">Guardar estado</button>\n  </form>"), function (form) {
+    openModal("Cambiar estado ".concat(escapeHtml(orderDisplayCode(order))), "<form class=\"state-grid\">\n    ".concat(STATES.map(function (status) { return "<label class=\"state-option ".concat(status === order.status ? "selected" : "", "\"><input type=\"radio\" name=\"status\" value=\"").concat(status, "\" ").concat(status === order.status ? "checked" : "", " /> <span>").concat(status, "</span></label>"); }).join(""), "\n    <button class=\"primary full\">Guardar estado</button>\n  </form>"), function (form) {
         var data = formDataToObject(form);
         var previousStatus = order.status;
         order.status = data.status;
@@ -935,6 +973,7 @@ function openOrderStateModal(id) {
             order.wasPaidBeforeRetired = order.paymentStatus === "Abonado";
             order.paymentStatus = "Abonado";
             order.location = "";
+            order.number = orderDisplayCode(order);
             syncOrderPayment(order);
         }
         else if (previousStatus === "Retirado" && !order.wasPaidBeforeRetired) {
@@ -951,7 +990,7 @@ function storageNoticeText(order) {
     var base = safeReplaceAll(state.settings.storageNoticeText, "{dias}", state.settings.storageNoticeDays);
     if (!order)
         return base;
-    return "".concat(base, "\n\nPedido #").concat(order.number, " - Cliente: ").concat(orderClient(order), " - Ubicaci\u00F3n: ").concat(order.location || "sin asignar", ".");
+    return "".concat(base, "\n\nPedido #").concat(orderDisplayCode(order), " - Cliente: ").concat(orderClient(order), " - Ubicaci\u00F3n: ").concat(order.location || "sin asignar", ".");
 }
 function sendWhatsapp(id, type) {
     var order = getOrder(id);
@@ -969,7 +1008,7 @@ function openWhatsappMenu(id) {
         "<div class=\"copy-row\"><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"received\" data-id=\"" + order.id + "\">Copiar recibido</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"ready\" data-id=\"" + order.id + "\">Copiar listo</button><button class=\"secondary\" data-action=\"copyWhatsapp\" data-message-type=\"retired\" data-id=\"" + order.id + "\">Copiar retirado</button></div>" +
         "<p class=\"copy-status\" aria-live=\"polite\"></p>" +
         "<textarea readonly>" + escapeHtml(messageForOrder(order, "ready")) + "</textarea></div>";
-    openModal("Mensajes WhatsApp #".concat(escapeHtml(order.number)), html);
+    openModal("Mensajes WhatsApp #".concat(escapeHtml(orderDisplayCode(order))), html);
 }
 function copyWhatsapp(id, type) {
     if (type === void 0) { type = "ready"; }
@@ -997,7 +1036,7 @@ function copyWhatsapp(id, type) {
 function openStorageNoticeModal(id) {
     var order = id ? getOrder(id) : null;
     var text = storageNoticeText(order);
-    openModal(order ? "Cartel dep\u00F3sito #".concat(escapeHtml(order.number)) : "Cartel general de depósito", "\n    <textarea class=\"notice-text\" readonly>".concat(escapeHtml(text), "</textarea>\n    <div class=\"actions\"><button class=\"primary\" data-action=\"copyNotice\">Copiar cartel</button>").concat(order ? "<button class=\"success\" data-action=\"sendStorageNotice\" data-id=\"".concat(order.id, "\">Enviar al cliente</button>") : "", "</div>"));
+    openModal(order ? "Cartel dep\u00F3sito #".concat(escapeHtml(orderDisplayCode(order))) : "Cartel general de depósito", "\n    <textarea class=\"notice-text\" readonly>".concat(escapeHtml(text), "</textarea>\n    <div class=\"actions\"><button class=\"primary\" data-action=\"copyNotice\">Copiar cartel</button>").concat(order ? "<button class=\"success\" data-action=\"sendStorageNotice\" data-id=\"".concat(order.id, "\">Enviar al cliente</button>") : "", "</div>"));
 }
 function copyVisibleNotice() {
     var text = (document.querySelector(".notice-text") && document.querySelector(".notice-text").value) || "";
@@ -1028,6 +1067,10 @@ function openCashModal(type) {
         render();
     });
 }
+function openDeleteCashModal() {
+    var entries = __spreadArray([], state.cash, true).sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+    openModal("Borrar movimiento", '<div class="cash-delete-list">'.concat(entries.map(function (entry) { return '<button class="cash-delete-option" data-action="deleteCashEntry" data-id="'.concat(entry.id, '"><span>').concat(formatDateTime(entry.date), ' · ').concat(escapeHtml(entry.type), ' · ').concat(escapeHtml(entry.category), '</span><strong>').concat(moneySigned(signedCashAmount(entry)), '</strong><small>').concat(escapeHtml(entry.description || "Sin descripción"), '</small></button>'); }).join('') || '<p>No hay movimientos para borrar.</p>', '</div>'));
+}
 function deleteCashEntry(id) {
     var entry = state.cash.find(function (movement) { return movement.id === Number(id); });
     if (!entry)
@@ -1043,6 +1086,7 @@ function deleteCashEntry(id) {
         }
     }
     saveState();
+    closeModal();
     render();
 }
 function closeCashDay() {
@@ -1060,32 +1104,25 @@ function closeCashDay() {
     saveState();
     render();
 }
-function excelCell(value) {
-    return "<td>" + escapeHtml(value == null ? "" : value) + "</td>";
-}
 function exportHistoricalCash() {
     var rows = [["Cierre", "Fecha movimiento", "Tipo", "Categoría", "Descripción", "Medio", "Importe"]];
     (state.cashHistory || []).forEach(function (day) {
         (day.entries || []).forEach(function (entry) { rows.push([formatDateTime(day.closedAt), formatDateTime(entry.date), entry.type, entry.category, entry.description, paymentMethodLabel(entry.method), signedCashAmount(entry)]); });
     });
-    var tableRows = rows.map(function (row, index) {
-        var tag = index === 0 ? "th" : "td";
-        return "<tr>" + row.map(function (cell) { return "<" + tag + ">" + escapeHtml(cell == null ? "" : cell) + "</" + tag + ">"; }).join("") + "</tr>";
-    }).join("");
-    var excel = '<html><head><meta charset="utf-8"></head><body><table>' + tableRows + '</table></body></html>';
-    var fileName = "caja-historica-" + localDateInput() + ".xls";
+    var csv = rows.map(function (row) { return row.map(function (cell) { return '"' + safeReplaceAll(String(cell == null ? "" : cell), '"', '""') + '"'; }).join(";"); }).join("\n");
+    var fileName = "caja-historica-" + localDateInput() + ".csv";
     if (window.Blob && window.URL && document.createElement) {
-        var blob = new Blob([excel], { type: "application/vnd.ms-excel;charset=utf-8" });
+        var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
         var link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        alert("Excel histórico exportado como " + fileName + ". El navegador lo guardó en tu carpeta de Descargas o en la ubicación que tengas configurada.");
+        alert("Exportado como " + fileName + ". Se guarda en Descargas o en la ubicación configurada por tu navegador. Para evitar la alerta de Excel, se usa CSV real en vez de .xls con HTML.");
     }
     else {
-        prompt("Copiá esta tabla HTML y guardala como " + fileName, excel);
+        prompt("Copiá este CSV y guardalo como " + fileName, csv);
     }
 }
 function saveSettings() {

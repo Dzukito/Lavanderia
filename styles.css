@@ -301,8 +301,6 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .metric-bars .income { background: #2f9e44; }
 .metric-bars .expense { background: #ff6b6b; }
 @media (max-width: 920px) { .cash-day-hero { align-items: stretch; flex-direction: column; } .new-day-button { width: 100%; } }
-.cash-delete-link { background: transparent; border: 0; border-radius: 999px; color: #868e96; cursor: pointer; font-size: 18px; font-weight: 900; line-height: 1; min-height: 0; padding: 2px 7px; }
-.cash-delete-link:hover { background: #fff5f5; color: #c92a2a; }
 .client-card-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .client-card { border-radius: 18px; gap: 7px; padding: 14px; }
 .client-card h3 { font-size: 20px; margin: 2px 0; }
@@ -319,8 +317,15 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .hour-line-chart polyline { fill: none; stroke: var(--primary); stroke-linecap: round; stroke-linejoin: round; stroke-width: 5; }
 .hour-chart-labels { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .hour-chart-labels span { background: #eef4ff; border-radius: 999px; color: var(--primary-dark); font-weight: 800; padding: 7px 10px; }
-.historical-cash-panel { margin-top: 18px; }
 .history-toggle { cursor: pointer; display: inline-flex; list-style: none; margin-bottom: 12px; }
 .compact-toolbar { margin-bottom: 10px; }
 .negative-amount { color: #c92a2a; font-weight: 900; }
 @media (max-width: 920px) { .metrics-focus-grid { grid-template-columns: 1fr; } }
+
+.hour-axis-labels { display: grid; font-size: 10px; gap: 2px; grid-template-columns: repeat(24, 1fr); margin-top: 4px; text-align: center; }
+.cash-delete-list { display: grid; gap: 10px; }
+.cash-delete-option { align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 14px; color: var(--text); display: grid; gap: 4px; grid-template-columns: 1fr auto; min-height: 52px; padding: 10px; text-align: left; }
+.cash-delete-option small { color: var(--muted); grid-column: 1 / -1; }
+.cash-delete-option:hover { border-color: #ff8787; }
+.client-picker-note { color: var(--muted); display: block; font-weight: 800; margin-top: 6px; }
+.monthly-cash-panel { margin-top: 18px; }
