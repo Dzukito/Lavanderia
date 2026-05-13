@@ -29,12 +29,15 @@ for (const feature of [
   'cashReportHtml',
   'renderCashReports',
   'orderDisplayCode',
+  'fourDigitId',
+  'customerOrderCode',
   'openMachineModal',
   'collectItems',
   'paymentBadge',
   'paymentMethodLabel',
   'cloneData',
   'safeReplaceAll',
+  'leftPad',
   'currentWeekDays',
   'setScheduleWeek',
     'openStorageOrder',
@@ -54,6 +57,9 @@ for (const feature of [
   'filterClients',
   'clientCards',
   'authorizedPickups',
+  'importCsvData',
+  'importClientsCsv',
+  'importOrdersCsv',
 ]) {
   assert.match(app, new RegExp(feature), `missing app feature ${feature}`);
 }
@@ -68,6 +74,7 @@ assert.doesNotMatch(app, /\|\|=/, 'app should avoid logical assignment to suppor
 assert.doesNotMatch(app, /Object\.fromEntries/, 'app should avoid Object.fromEntries to support older browsers');
 assert.doesNotMatch(app, /dateStyle|timeStyle/, 'app should avoid newer Intl dateStyle/timeStyle options');
 assert.doesNotMatch(app, /Number\.isNaN/, 'app should avoid Number.isNaN to support older browsers');
+assert.doesNotMatch(app, /padStart/, 'app should avoid String.padStart to support older browsers');
 assert.doesNotMatch(app, /Array\.from|Object\.entries|new Map|new Set|selectedOptions|\.dataset/, 'startup path should avoid fragile modern DOM/runtime helpers');
 assert.doesNotMatch(app + scheduler + polyfills, /=>|`|\bconst\b|\blet\b|\?\./, 'runtime scripts should avoid syntax that breaks old browsers at parse time');
 assert.match(html, /polyfills\.js[\s\S]*scheduler\.js[\s\S]*app\.js/, 'polyfills should load before runtime scripts');
@@ -104,13 +111,19 @@ assert.doesNotMatch(app, /<th>Acciones<\/th>|cash-delete-link/, 'cash table shou
 assert.match(app, /openDeleteCashModal[\s\S]*cash-delete-option[\s\S]*deleteCashEntry/, 'cash deletion should happen from a separate selector button');
 assert.match(app, /closeCashDay[\s\S]*cashHistory|Empezar nuevo día/, 'cash should close the day into historical storage');
 assert.match(app, /exportHistoricalCash[\s\S]*signedCashAmount[\s\S]*caja-historica[\s\S]*\.csv/, 'cash should export historical cash as CSV with negative expenses');
+assert.match(app, /Exportar caja histórica CSV/, 'cash export button should clearly name the historical cash export');
+assert.match(app, /exportMonthlyCash[\s\S]*caja-mensual[\s\S]*\.csv/, 'metrics should export only the selected monthly cash as CSV');
+assert.match(app, /Exportar caja mensual CSV/, 'metrics export button should clearly name the monthly cash export');
 assert.match(app, /metricsPin: "1111"/, 'metrics PIN should default to 1111');
 assert.match(app, /metricsPin[\s\S]*Clave de métricas/, 'settings should allow editing metrics PIN');
 assert.match(app, /cashReports[\s\S]*metricsPinUnlock|metricsPinUnlock[\s\S]*cashReports/, 'metrics should read its own unlock field instead of the hidden cash PIN field');
 assert.doesNotMatch(app, /data-action="exportData"|data-action="importData"/, 'settings should not expose generic import/export data actions');
+assert.match(app, /Importar CSV[\s\S]*csvImportType[\s\S]*Clientes[\s\S]*Pedidos[\s\S]*csvImportFile[\s\S]*importCsvData/, 'settings should import clients or orders from CSV');
 assert.match(app, /description: .*orderClient\(order\).*orderDisplayCode\(order\)/, 'cash payment description should include client and order code');
 assert.match(app, /var STATES = \["Pendiente", "Listo", "Retirado"\]/, 'orders should use simplified states');
 assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received notification');
+assert.match(app, /Total: \{total\}/, 'WhatsApp templates should include order total for customers');
+assert.match(app, /messageForOrder[\s\S]*customerOrderCode\(order\)/, 'WhatsApp messages should send the simple customer order id instead of the storage code');
 assert.match(app, /if \(view === "cash" \|\| view === "cashReports"\)[\s\S]{0,80}cashUnlocked = false/, 'cash and metrics views should request PIN every time');
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');

@@ -55,9 +55,9 @@ var defaultData = {
         dryingMinutes: 50,
         smallWashers: 4,
         dryers: 6,
-        whatsappReceivedMessage: "Hola {cliente}. Recibimos tu pedido {pedido}. {pago}. Te avisamos cuando esté listo. Gracias.",
-        whatsappMessage: "Hola {cliente}. Tu pedido {pedido} ya está listo para retirar. {pago}. Te esperamos.",
-        whatsappRetiredMessage: "Hola {cliente}. Dejamos constancia de que retiró su pedido {pedido} el {fecha}. {pago}. Muchas gracias.",
+        whatsappReceivedMessage: "Hola {cliente}, recibimos tu pedido {pedido}. Total: {total}. Te avisamos cuando esté listo. Gracias.",
+        whatsappMessage: "Hola {cliente}, tu pedido {pedido} ya está listo para retirar. Total: {total}. {pago} Te esperamos.",
+        whatsappRetiredMessage: "Hola {cliente}, registramos la entrega de tu pedido {pedido}. Muchas gracias por elegirnos.",
         storageNoticeDays: 30,
         storageNoticeText: "Condiciones de guarda: conforme las condiciones informadas al momento de recepción y el deber de información clara previsto por la Ley 24.240 de Defensa del Consumidor, los pedidos no retirados dentro de {dias} días corridos desde el aviso de disponibilidad podrán generar cargos de guarda y/o ser derivados a donación previa comunicación fehaciente al cliente. Texto sujeto a validación legal local.",
         cashPin: "1234",
@@ -127,6 +127,13 @@ function storageSet(key, value) {
         console.warn("No se pudo guardar en el almacenamiento local. Revisá permisos del navegador.", error);
     }
 }
+function leftPad(value, length, character) {
+    var text = String(value || "");
+    var pad = character || "0";
+    while (text.length < length)
+        text = pad + text;
+    return text;
+}
 function formDataToObject(form) {
     var result = {};
     if (window.FormData) {
@@ -149,7 +156,7 @@ function formatShortDateTime(date) {
     var value = new Date(date);
     if (isNaN(value.getTime()))
         return "Sin estimar";
-    return "".concat(String(value.getDate()).padStart(2, "0"), "/").concat(String(value.getMonth() + 1).padStart(2, "0"), "/").concat(String(value.getFullYear()).slice(-2), " ").concat(String(value.getHours()).padStart(2, "0"), ":").concat(String(value.getMinutes()).padStart(2, "0"));
+    return "".concat(leftPad(value.getDate(), 2, "0"), "/").concat(leftPad(value.getMonth() + 1, 2, "0"), "/").concat(String(value.getFullYear()).slice(-2), " ").concat(leftPad(value.getHours(), 2, "0"), ":").concat(leftPad(value.getMinutes(), 2, "0"));
 }
 function flatten(list) {
     return Array.prototype.concat.apply([], list);
@@ -200,6 +207,12 @@ function loadState() {
     var merged = __assign(__assign(__assign({}, defaults), parsed), { settings: __assign(__assign({}, defaults.settings), (parsed.settings || {})), services: parsed.services && parsed.services.length ? parsed.services : defaults.services, clients: parsed.clients && parsed.clients.length ? parsed.clients : defaults.clients, orders: parsed.orders || defaults.orders, cash: parsed.cash || defaults.cash, locations: mergeLocations(defaults.locations, parsed.locations), cashHistory: parsed.cashHistory || defaults.cashHistory });
     if (!parsed.settings || !Object.prototype.hasOwnProperty.call(parsed.settings, "metricsPin") || parsed.settings.metricsPin === "1234")
         merged.settings.metricsPin = defaults.settings.metricsPin;
+    if (!parsed.settings || parsed.settings.whatsappReceivedMessage === "Hola {cliente}. Recibimos tu pedido {pedido}. {pago}. Te avisamos cuando esté listo. Gracias." )
+        merged.settings.whatsappReceivedMessage = defaults.settings.whatsappReceivedMessage;
+    if (!parsed.settings || parsed.settings.whatsappMessage === "Hola {cliente}. Tu pedido {pedido} ya está listo para retirar. {pago}. Te esperamos." )
+        merged.settings.whatsappMessage = defaults.settings.whatsappMessage;
+    if (!parsed.settings || parsed.settings.whatsappRetiredMessage === "Hola {cliente}. Dejamos constancia de que retiró su pedido {pedido} el {fecha}. {pago}. Muchas gracias." )
+        merged.settings.whatsappRetiredMessage = defaults.settings.whatsappRetiredMessage;
     merged.clients = merged.clients.map(function (client) { return (__assign({ authorizedPickups: "" }, client)); });
     merged.orders = merged.orders.map(function (order) {
         var paymentStatus = order.paymentStatus || (order.status === "Abonado" ? "Abonado" : "Pendiente");
@@ -234,7 +247,7 @@ function nextId(list) {
     return list.length ? Math.max.apply(Math, list.map(function (item) { return item.id; })) + 1 : 1;
 }
 function nextOrderNumber() {
-    return String(1000 + nextId(state.orders)).padStart(4, "0");
+    return leftPad(1000 + nextId(state.orders), 4, "0");
 }
 function getClient(id) {
     return state.clients.find(function (client) { return client.id === Number(id); });
@@ -287,7 +300,7 @@ function dateKey(date) {
     return new Date(date).toISOString().slice(0, 10);
 }
 function hourLabel(hour) {
-    return "".concat(String(hour).padStart(2, "0"), ":00");
+    return "".concat(leftPad(hour, 2, "0"), ":00");
 }
 function cycleOverlapsHour(cycle, day, hour) {
     var start = new Date(cycle.start);
@@ -320,7 +333,7 @@ function topMetrics(values, limit) {
 function emptyHourlyCounts() {
     var hours = [];
     for (var hour = 0; hour < 24; hour += 1)
-        hours.push({ hour: hour, label: String(hour).padStart(2, "0") + ":00", count: 0 });
+        hours.push({ hour: hour, label: leftPad(hour, 2, "0") + ":00", count: 0 });
     return hours;
 }
 function monthlyCashSummary() {
@@ -395,7 +408,7 @@ function historicalCashRows() {
 }
 function monthlyCashHtml(month) {
     var rows = historicalCashRows().filter(function (entry) { return monthKey(entry.date) === month; });
-    return '<details class="monthly-cash-panel"><summary class="secondary history-toggle">Ver caja mensual</summary><div class="toolbar compact-toolbar"><h3>Caja mensual ' + escapeHtml(month || "sin mes") + '</h3><button class="secondary" data-action="exportHistoricalCash">Exportar histórico global CSV</button></div><div class="table-wrap"><table class="cash-history-table"><thead><tr><th>Cierre</th><th>Movimiento</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(rows.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.closedAt), '</td><td>').concat(formatDateTime(entry.date), '</td><td>').concat(escapeHtml(entry.type), '</td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td class="').concat(signedCashAmount(entry) < 0 ? 'negative-amount' : '', '">').concat(moneySigned(signedCashAmount(entry)), '</td></tr>'); }).join('') || '<tr><td colspan="7">No hay caja archivada para este mes.</td></tr>', '</tbody></table></div></details>');
+    return '<details class="monthly-cash-panel"><summary class="secondary history-toggle">Ver caja mensual</summary><div class="toolbar compact-toolbar"><h3>Caja mensual ' + escapeHtml(month || "sin mes") + '</h3><button class="secondary" data-action="exportMonthlyCash" data-month="' + escapeHtml(month || "") + '">Exportar caja mensual CSV</button></div><div class="table-wrap"><table class="cash-history-table"><thead><tr><th>Cierre</th><th>Movimiento</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(rows.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.closedAt), '</td><td>').concat(formatDateTime(entry.date), '</td><td>').concat(escapeHtml(entry.type), '</td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td class="').concat(signedCashAmount(entry) < 0 ? 'negative-amount' : '', '">').concat(moneySigned(signedCashAmount(entry)), '</td></tr>'); }).join('') || '<tr><td colspan="7">No hay caja archivada para este mes.</td></tr>', '</tbody></table></div></details>');
 }
 function orderHourLineChart(row) {
     var counts = row.hourlyCounts || emptyHourlyCounts();
@@ -437,7 +450,7 @@ function messageForOrder(order, type) {
     var isPaid = order.paymentStatus === "Abonado";
     var unpaidText = type === "ready" ? "Para retirar, el total a pagar es ".concat(money(order.total), ".") : "Queda pendiente de pago ".concat(money(order.total), ".");
     var paymentText = isPaid ? "Ya figura pago por ".concat(order.paymentMethod || "medio registrado", ".") : unpaidText;
-    return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", orderDisplayCode(order)), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
+    return safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(safeReplaceAll(templates[type], "{cliente}", orderClient(order)), "{pedido}", customerOrderCode(order)), "{fecha}", formatDateTime(new Date().toISOString())), "{estimado}", formatDateTime(order.estimate)), "{pago}", paymentText), "{total}", money(order.total));
 }
 function safeRenderView(id, callback) {
     try {
@@ -504,6 +517,8 @@ document.addEventListener("click", function (event) {
         deleteCashEntry: function () { return deleteCashEntry(id); },
         closeCashDay: closeCashDay,
         exportHistoricalCash: exportHistoricalCash,
+        exportMonthlyCash: function () { return exportMonthlyCash(target.getAttribute("data-month")); },
+        importCsvData: importCsvData,
         unlockCash: unlockCash,
         saveSettings: saveSettings,
         resetDemo: resetDemo,
@@ -539,12 +554,18 @@ document.addEventListener("change", function (event) {
     if (priceInput && selected && selected.getAttribute("data-price"))
         priceInput.value = selected.getAttribute("data-price");
 });
+function fourDigitId(id) {
+    return leftPad(id, 4, "0");
+}
 function orderDisplayCode(order) {
     if (order.status === "Retirado")
-        return "R#" + String(order.id).padStart(4, "0");
+        return "R#" + fourDigitId(order.id);
     if (!order.location)
         return "Sin depósito";
-    return "".concat(order.location, "#").concat(String(order.id).padStart(4, "0"));
+    return "".concat(order.location, "#").concat(fourDigitId(order.id));
+}
+function customerOrderCode(order) {
+    return order && order.id ? "#" + fourDigitId(order.id) : "Sin pedido";
 }
 function itemLineTotal(item) {
     return Number(item.price || 0) * Number(item.quantity || 1);
@@ -769,7 +790,7 @@ function renderCash() {
     var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount); }, 0);
     var cash = state.cash.filter(function (entry) { return entry.method === "Efectivo"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
     var transfer = state.cash.filter(function (entry) { return entry.method === "Transferencia"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
-    document.getElementById("cash").innerHTML = '\n    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>'.concat(money(income), '</strong></article><article class="card metric"><span>Egresos</span><strong>').concat(money(expense), '</strong></article><article class="card metric"><span>Efectivo</span><strong>').concat(money(cash), '</strong></article><article class="card metric"><span>Transferencia</span><strong>').concat(money(transfer), '</strong></article></div>\n    <div class="card cash-day-hero"><div><p class="eyebrow-dark">Cierre diario</p><h2>Empezar nuevo día</h2><p>Guarda todos los movimientos actuales en la caja histórica y deja la caja diaria en cero.</p></div><button class="danger big-action new-day-button" data-action="closeCashDay">Empezar nuevo día</button></div>\n    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button><button class="secondary" data-action="openDeleteCashModal">Borrar movimiento</button><button class="secondary" data-action="exportHistoricalCash">Exportar CSV para Excel</button></div></div>').concat(cashTable(), '</div>');
+    document.getElementById("cash").innerHTML = '\n    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>'.concat(money(income), '</strong></article><article class="card metric"><span>Egresos</span><strong>').concat(money(expense), '</strong></article><article class="card metric"><span>Efectivo</span><strong>').concat(money(cash), '</strong></article><article class="card metric"><span>Transferencia</span><strong>').concat(money(transfer), '</strong></article></div>\n    <div class="card cash-day-hero"><div><p class="eyebrow-dark">Cierre diario</p><h2>Empezar nuevo día</h2><p>Guarda todos los movimientos actuales en la caja histórica y deja la caja diaria en cero.</p></div><button class="danger big-action new-day-button" data-action="closeCashDay">Empezar nuevo día</button></div>\n    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button><button class="secondary" data-action="openDeleteCashModal">Borrar movimiento</button><button class="secondary" data-action="exportHistoricalCash">Exportar caja histórica CSV</button></div></div>').concat(cashTable(), '</div>');
 }
 function cashTable() {
     var entries = __spreadArray([], state.cash, true).sort(function (a, b) {
@@ -790,7 +811,7 @@ function renderCashReports() {
     document.getElementById("cashReports").innerHTML = cashReportHtml();
 }
 function renderSettings() {
-    document.getElementById("settings").innerHTML = "\n    <div class=\"card\"><h2>Configuración</h2><div class=\"form-grid\">\n      <label>Apertura<input id=\"openHour\" type=\"time\" value=\"".concat(escapeHtml(state.settings.openHour), "\" /></label>\n      <label>Cierre<input id=\"closeHour\" type=\"time\" value=\"").concat(escapeHtml(state.settings.closeHour), "\" /></label>\n      <label>Lavarropas chicos<input id=\"smallWashers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.smallWashers), "\" /></label>\n      <label>Secadoras<input id=\"dryers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryers), "\" /></label>\n      <label>Minutos lavado<input id=\"washingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.washingMinutes), "\" /></label>\n      <label>Minutos secado<input id=\"dryingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryingMinutes), "\" /></label>\n      <label>Clave de caja<input id=\"cashPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.cashPin), "\" /></label>\n      <label>Clave de métricas<input id=\"metricsPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.metricsPin), "\" /></label>\n      <label class=\"full\">WhatsApp pedido recibido<textarea id=\"whatsappReceivedMessage\">").concat(escapeHtml(state.settings.whatsappReceivedMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp pedido listo<textarea id=\"whatsappMessage\">").concat(escapeHtml(state.settings.whatsappMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp retirado<textarea id=\"whatsappRetiredMessage\">").concat(escapeHtml(state.settings.whatsappRetiredMessage), "</textarea></label>\n      <label>Días para aviso depósito<input id=\"storageNoticeDays\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.storageNoticeDays), "\" /></label>\n      <label class=\"full\">Cartel de depósito<textarea id=\"storageNoticeText\">").concat(escapeHtml(state.settings.storageNoticeText), "</textarea></label>\n    </div><br><div class=\"actions\"><button class=\"primary\" data-action=\"saveSettings\">Guardar</button><button class=\"danger\" data-action=\"resetDemo\">Reiniciar demo</button></div></div>");
+    document.getElementById("settings").innerHTML = "\n    <div class=\"card\"><h2>Configuración</h2><div class=\"form-grid\">\n      <label>Apertura<input id=\"openHour\" type=\"time\" value=\"".concat(escapeHtml(state.settings.openHour), "\" /></label>\n      <label>Cierre<input id=\"closeHour\" type=\"time\" value=\"").concat(escapeHtml(state.settings.closeHour), "\" /></label>\n      <label>Lavarropas chicos<input id=\"smallWashers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.smallWashers), "\" /></label>\n      <label>Secadoras<input id=\"dryers\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryers), "\" /></label>\n      <label>Minutos lavado<input id=\"washingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.washingMinutes), "\" /></label>\n      <label>Minutos secado<input id=\"dryingMinutes\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.dryingMinutes), "\" /></label>\n      <label>Clave de caja<input id=\"cashPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.cashPin), "\" /></label>\n      <label>Clave de métricas<input id=\"metricsPin\" type=\"password\" value=\"").concat(escapeHtml(state.settings.metricsPin), "\" /></label>\n      <label class=\"full\">WhatsApp pedido recibido<textarea id=\"whatsappReceivedMessage\">").concat(escapeHtml(state.settings.whatsappReceivedMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp pedido listo<textarea id=\"whatsappMessage\">").concat(escapeHtml(state.settings.whatsappMessage), "</textarea></label>\n      <label class=\"full\">WhatsApp retirado<textarea id=\"whatsappRetiredMessage\">").concat(escapeHtml(state.settings.whatsappRetiredMessage), "</textarea></label>\n      <label>Días para aviso depósito<input id=\"storageNoticeDays\" type=\"number\" min=\"1\" value=\"").concat(Number(state.settings.storageNoticeDays), "\" /></label>\n      <label class=\"full\">Cartel de depósito<textarea id=\"storageNoticeText\">").concat(escapeHtml(state.settings.storageNoticeText), "</textarea></label>\n    </div><br><div class=\"actions\"><button class=\"primary\" data-action=\"saveSettings\">Guardar</button><button class=\"danger\" data-action=\"resetDemo\">Reiniciar demo</button></div></div>\n    <div class=\"card\"><h2>Importar CSV</h2><p>Importá clientes o pedidos desde un archivo CSV separado por coma o punto y coma. No borra los datos actuales.</p><div class=\"form-grid\"><label>Tipo de datos<select id=\"csvImportType\"><option value=\"clients\">Clientes</option><option value=\"orders\">Pedidos</option></select></label><label>Archivo CSV<input id=\"csvImportFile\" type=\"file\" accept=\".csv,text/csv\" /></label><p class=\"full\"><strong>Columnas clientes:</strong> nombre, telefono, direccion, notas, autorizados. <strong>Columnas pedidos:</strong> cliente, telefono, prenda, cantidad, precio, estado, pago, medio, deposito, notas.</p></div><br><button class=\"secondary\" data-action=\"importCsvData\">Importar CSV seleccionado</button></div>");
 }
 function openModal(title, html, onSubmit) {
     var template = document.getElementById("modalTemplate").content.cloneNode(true);
@@ -1133,13 +1154,16 @@ function closeCashDay() {
     saveState();
     render();
 }
-function exportHistoricalCash() {
+function csvEscape(value) {
+    return '"' + safeReplaceAll(String(value == null ? "" : value), '"', '""') + '"';
+}
+function cashExportRows(entries) {
     var rows = [["Cierre", "Fecha movimiento", "Tipo", "Categoría", "Descripción", "Medio", "Importe"]];
-    (state.cashHistory || []).forEach(function (day) {
-        (day.entries || []).forEach(function (entry) { rows.push([formatDateTime(day.closedAt), formatDateTime(entry.date), entry.type, entry.category, entry.description, paymentMethodLabel(entry.method), signedCashAmount(entry)]); });
-    });
-    var csv = rows.map(function (row) { return row.map(function (cell) { return '"' + safeReplaceAll(String(cell == null ? "" : cell), '"', '""') + '"'; }).join(";"); }).join("\n");
-    var fileName = "caja-historica-" + localDateInput() + ".csv";
+    entries.forEach(function (entry) { rows.push([formatDateTime(entry.closedAt), formatDateTime(entry.date), entry.type, entry.category, entry.description, paymentMethodLabel(entry.method), signedCashAmount(entry)]); });
+    return rows;
+}
+function downloadCsv(rows, fileName, label) {
+    var csv = rows.map(function (row) { return row.map(csvEscape).join(";"); }).join("\n");
     if (window.Blob && window.URL && document.createElement) {
         var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
         var link = document.createElement("a");
@@ -1148,11 +1172,143 @@ function exportHistoricalCash() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        alert("Exportado como " + fileName + ". Se guarda en Descargas o en la ubicación configurada por tu navegador. Para evitar la alerta de Excel, se usa CSV real en vez de .xls con HTML.");
+        alert(label + " exportada como " + fileName + ". Se guarda en Descargas o en la ubicación configurada por tu navegador.");
     }
     else {
         prompt("Copiá este CSV y guardalo como " + fileName, csv);
     }
+}
+function exportHistoricalCash() {
+    downloadCsv(cashExportRows(historicalCashRows()), "caja-historica-" + localDateInput() + ".csv", "Caja histórica");
+}
+function exportMonthlyCash(month) {
+    var selectedMonth = month || selectedMetricsMonth || localDateInput().slice(0, 7);
+    var rows = historicalCashRows().filter(function (entry) { return monthKey(entry.date) === selectedMonth; });
+    downloadCsv(cashExportRows(rows), "caja-mensual-" + selectedMonth + ".csv", "Caja mensual " + selectedMonth);
+}
+function csvRows(text) {
+    var rows = [];
+    var row = [];
+    var value = "";
+    var quoted = false;
+    for (var index = 0; index < text.length; index += 1) {
+        var character = text.charAt(index);
+        var next = text.charAt(index + 1);
+        if (quoted) {
+            if (character === '"' && next === '"') {
+                value += '"';
+                index += 1;
+            }
+            else if (character === '"')
+                quoted = false;
+            else
+                value += character;
+        }
+        else if (character === '"')
+            quoted = true;
+        else if (character === ";" || character === ",") {
+            row.push(value);
+            value = "";
+        }
+        else if (character === "\n") {
+            row.push(value);
+            rows.push(row);
+            row = [];
+            value = "";
+        }
+        else if (character !== "\r")
+            value += character;
+    }
+    row.push(value);
+    rows.push(row);
+    return rows.filter(function (csvRow) { return csvRow.join("").trim(); });
+}
+function headerIndex(headers, names) {
+    for (var index = 0; index < headers.length; index += 1) {
+        var header = headers[index].toLowerCase().trim();
+        for (var nameIndex = 0; nameIndex < names.length; nameIndex += 1) {
+            if (header === names[nameIndex])
+                return index;
+        }
+    }
+    return -1;
+}
+function csvValue(row, headers, names) {
+    var index = headerIndex(headers, names);
+    return index >= 0 ? row[index] || "" : "";
+}
+function importClientsCsv(rows) {
+    var headers = rows[0] || [];
+    var added = 0;
+    for (var rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+        var row = rows[rowIndex];
+        var name = csvValue(row, headers, ["nombre", "name", "cliente", "client"]);
+        var phone = csvValue(row, headers, ["telefono", "teléfono", "phone", "whatsapp", "celular"]);
+        if (!name || !phone)
+            continue;
+        var exists = state.clients.some(function (client) { return client.phone === phone; });
+        if (exists)
+            continue;
+        state.clients.push({ id: nextId(state.clients), name: name, phone: phone, address: csvValue(row, headers, ["direccion", "dirección", "address"]), notes: csvValue(row, headers, ["notas", "notes"]), authorizedPickups: csvValue(row, headers, ["autorizados", "authorizedpickups", "retira"]) });
+        added += 1;
+    }
+    return added;
+}
+function findOrCreateClient(name, phone) {
+    var cleanPhone = phone || "Sin teléfono";
+    for (var index = 0; index < state.clients.length; index += 1) {
+        if (state.clients[index].phone === cleanPhone || state.clients[index].name === name)
+            return state.clients[index];
+    }
+    var client = { id: nextId(state.clients), name: name || "Cliente CSV", phone: cleanPhone, address: "", notes: "Importado por CSV", authorizedPickups: "" };
+    state.clients.push(client);
+    return client;
+}
+function importOrdersCsv(rows) {
+    var headers = rows[0] || [];
+    var added = 0;
+    for (var rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+        var row = rows[rowIndex];
+        var client = findOrCreateClient(csvValue(row, headers, ["cliente", "client", "nombre", "name"]), csvValue(row, headers, ["telefono", "teléfono", "phone", "whatsapp"]));
+        var service = state.services[0];
+        var quantity = Number(csvValue(row, headers, ["cantidad", "quantity", "qty"]) || 1);
+        var price = Number(csvValue(row, headers, ["precio", "price", "importe", "amount"]) || service.price || 0);
+        var itemName = csvValue(row, headers, ["prenda", "item", "itemname", "trabajo"]) || service.name;
+        var createdAt = new Date().toISOString();
+        var schedule = createOrderSchedule(service, createdAt);
+        var orderId = nextId(state.orders);
+        var location = csvValue(row, headers, ["deposito", "depósito", "location"]) || nextFreeLocation();
+        var items = [{ name: itemName, quantity: quantity, serviceId: service.id, serviceName: service.name, price: price }];
+        var order = { id: orderId, number: "", clientId: client.id, serviceId: service.id, createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: csvValue(row, headers, ["estado", "status"]) || "Pendiente", items: items, total: orderItemsTotal(items), location: location, notes: csvValue(row, headers, ["notas", "notes", "observaciones"]), paymentStatus: csvValue(row, headers, ["pago", "paymentstatus"]) || "Pendiente", paymentMethod: csvValue(row, headers, ["medio", "paymentmethod"]) || "Efectivo" };
+        order.number = orderDisplayCode(order);
+        state.orders.push(order);
+        if (order.paymentStatus === "Abonado")
+            syncOrderPayment(order);
+        added += 1;
+    }
+    return added;
+}
+function importCsvData() {
+    var fileInput = document.getElementById("csvImportFile");
+    var typeInput = document.getElementById("csvImportType");
+    var file = fileInput && fileInput.files && fileInput.files[0];
+    if (!file || !window.FileReader) {
+        alert("Elegí un archivo CSV para importar.");
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+        var rows = csvRows(String(reader.result || ""));
+        if (!rows.length) {
+            alert("El CSV está vacío o no se pudo leer.");
+            return;
+        }
+        var imported = typeInput && typeInput.value === "orders" ? importOrdersCsv(rows) : importClientsCsv(rows);
+        saveState();
+        render();
+        alert("Importación CSV completa: " + imported + " registros agregados.");
+    };
+    reader.readAsText(file);
 }
 function saveSettings() {
     ["openHour", "closeHour", "whatsappReceivedMessage", "whatsappMessage", "whatsappRetiredMessage", "storageNoticeText", "cashPin", "metricsPin"].forEach(function (key) { return state.settings[key] = document.getElementById(key).value; });
