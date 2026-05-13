@@ -166,6 +166,9 @@ var currentView = "dashboard";
 var cashUnlocked = false;
 var selectedMachine = null;
 var scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
+var scheduleSelectedDate = localDateInput();
+var scheduleViewMode = "day";
+var scheduleSlotMinutes = 30;
 var schedulePreview = null;
 var selectedMetricsMonth = "";
 function mergeLocations(defaultLocations, savedLocations) {
@@ -219,7 +222,7 @@ function loadState() {
         var status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
         var items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0), quantity: 1 }];
         items = items.map(function (item) { return __assign({ quantity: 1 }, item); });
-        return __assign(__assign({}, order), { status: status, paymentStatus: paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items: items });
+        return ensureOrderCycleIds(__assign(__assign({}, order), { status: status, paymentStatus: paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items: items }));
     });
     return merged;
 }
@@ -284,6 +287,24 @@ function availableLocations(currentOrderId) {
 }
 function createOrderSchedule(service, createdAt) {
     return LaundryScheduler.scheduleOrder(state.orders, service, state.settings, createdAt);
+}
+function nextCycleId(orderId, index) {
+    return "c" + String(orderId || "nuevo") + "-" + String(index || 0) + "-" + String(new Date().getTime());
+}
+function ensureOrderCycleIds(order) {
+    (order.cycles || []).forEach(function (cycle, index) {
+        if (!cycle.cycleId)
+            cycle.cycleId = nextCycleId(order.id, index);
+    });
+    return order;
+}
+function refreshOrderEstimate(order) {
+    var latest = order.createdAt || new Date().toISOString();
+    (order.cycles || []).forEach(function (cycle) {
+        if (cycle.end && new Date(cycle.end) > new Date(latest))
+            latest = cycle.end;
+    });
+    order.estimate = latest;
 }
 function currentWeekDays(reference) {
     if (reference === void 0) { reference = new Date(); }
@@ -352,7 +373,7 @@ function monthlyCashSummary() {
         if (entry.method === "Transferencia")
             summary[key].transfer += entry.type === "Ingreso" ? amount : -amount;
     });
-    state.orders.forEach(function (order) {
+    operationalOrders().forEach(function (order) {
         var orderMonth = monthKey(order.createdAt);
         if (!summary[orderMonth])
             summary[orderMonth] = { income: 0, expense: 0, cash: 0, transfer: 0 };
@@ -369,7 +390,7 @@ function monthlyCashSummary() {
         var previousValues = index > 0 ? summary[months[index - 1]] : null;
         var previous = previousValues ? previousValues.income - previousValues.expense : null;
         var diff = previous ? Math.round(((balance - previous) / Math.abs(previous)) * 100) : null;
-        var monthOrders = state.orders.filter(function (order) { return monthKey(order.createdAt) === month; });
+        var monthOrders = operationalOrders().filter(function (order) { return monthKey(order.createdAt) === month; });
         var hourlyCounts = emptyHourlyCounts();
         var clients = {};
         monthOrders.forEach(function (order) {
@@ -504,7 +525,16 @@ document.addEventListener("click", function (event) {
         openStorageOrder: function () { return openStorageOrder(id); },
         prevWeek: function () { return moveScheduleWeek(-7); },
         nextWeek: function () { return moveScheduleWeek(7); },
-        todayWeek: function () { return setScheduleWeek(currentWeekStart(new Date()).toISOString().slice(0, 10)); },
+        todayWeek: function () { return setScheduleDate(localDateInput()); },
+        scheduleViewMode: function () { return setScheduleViewMode(target.getAttribute("data-mode")); },
+        openMachineBlockModal: openMachineBlockModal,
+        saveMachineBlock: function () { return saveMachineBlock(target); },
+        rescheduleActiveOrders: rescheduleActiveOrders,
+        openFreeSlotFinder: openFreeSlotFinder,
+        openUnscheduledOrdersModal: openUnscheduledOrdersModal,
+        openCycleEdit: function () { return openCycleEditModal(id, target.getAttribute("data-cycle-id")); },
+        saveCycleEdit: function () { return saveCycleEdit(target); },
+        deleteCycle: function () { return deleteCycle(id, target.getAttribute("data-cycle-id")); },
         sendWhatsapp: function () { return sendWhatsapp(id, target.getAttribute("data-message-type")); },
         copyWhatsapp: function () { return copyWhatsapp(id, target.getAttribute("data-message-type")); },
         copyNotice: copyVisibleNotice,
@@ -535,6 +565,8 @@ document.addEventListener("input", function (event) {
         applyOrderFilters();
     if (event.target.matches("[data-search-clients]"))
         filterClients(event.target.value);
+    if (event.target.matches("[data-preview-field]"))
+        updateSchedulePreview(event.target.closest(".modal-backdrop"));
 });
 document.addEventListener("change", function (event) {
     if (event.target.matches("[data-metrics-month]")) {
@@ -542,8 +574,17 @@ document.addEventListener("change", function (event) {
         renderCashReports();
         return;
     }
-    if (event.target.matches("[data-schedule-week]")) {
-        setScheduleWeek(event.target.value);
+    if (event.target.matches("[data-schedule-week], [data-schedule-date]")) {
+        setScheduleDate(event.target.value);
+        return;
+    }
+    if (event.target.matches("[data-schedule-slot]")) {
+        scheduleSlotMinutes = Number(event.target.value || 30);
+        renderSchedule();
+        return;
+    }
+    if (event.target.matches("[data-preview-field]")) {
+        updateSchedulePreview(event.target.closest(".modal-backdrop"));
         return;
     }
     if (!event.target.matches("[data-service-select]"))
@@ -597,6 +638,9 @@ function nextFreeLocation() {
     return (availableLocations()[0] && availableLocations()[0].code) || "";
 }
 var dashboardTab = "Pendiente";
+function operationalOrders() {
+    return state.orders.filter(function (order) { return !order.block; });
+}
 function orderGroup(order) {
     if (order.status === "Retirado")
         return "Retirado";
@@ -605,7 +649,7 @@ function orderGroup(order) {
     return "Pendiente";
 }
 function ordersByGroup(group) {
-    return state.orders.filter(function (order) { return orderGroup(order) === group; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    return operationalOrders().filter(function (order) { return orderGroup(order) === group; }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
 }
 function setDashboardTab(tab) {
     dashboardTab = tab;
@@ -633,12 +677,12 @@ function renderDashboard() {
 }
 function renderOrders() {
     var today = localDateInput();
-    document.getElementById("orders").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Operaci\u00F3n</p><h2>Pedidos</h2></div><button class=\"primary\" data-action=\"newOrder\">+ Nuevo pedido</button></div>\n      <div class=\"filters-row\"><input id=\"orderSearch\" data-search-orders placeholder=\"Buscar por dep\u00F3sito, cliente, tel\u00E9fono, estado u observaciones\" /><label>Fecha<input id=\"orderDateFilter\" data-order-date type=\"date\" value=\"".concat(today, "\" /></label><button class=\"secondary\" data-action=\"clearOrderDate\">Ver todos</button></div>\n    </div>\n    <div id=\"ordersTable\">").concat(orderCards(state.orders.filter(function (order) { return dateKey(order.createdAt) === today; }).reverse(), "Pedidos del día", false), "</div>\n  ");
+    document.getElementById("orders").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Operaci\u00F3n</p><h2>Pedidos</h2></div><button class=\"primary\" data-action=\"newOrder\">+ Nuevo pedido</button></div>\n      <div class=\"filters-row\"><input id=\"orderSearch\" data-search-orders placeholder=\"Buscar por dep\u00F3sito, cliente, tel\u00E9fono, estado u observaciones\" /><label>Fecha<input id=\"orderDateFilter\" data-order-date type=\"date\" value=\"".concat(today, "\" /></label><button class=\"secondary\" data-action=\"clearOrderDate\">Ver todos</button></div>\n    </div>\n    <div id=\"ordersTable\">").concat(orderCards(operationalOrders().filter(function (order) { return dateKey(order.createdAt) === today; }).reverse(), "Pedidos del día", false), "</div>\n  ");
 }
 window.filterOrders = function (query, date) {
     if (date === void 0) { date = ""; }
     var q = query.toLowerCase();
-    var filtered = state.orders.filter(function (order) {
+    var filtered = operationalOrders().filter(function (order) {
         var matchesQuery = "".concat(order.number, " ").concat(order.location || "", " ").concat(orderClient(order), " ").concat(orderDisplayCode(order), " ").concat((getClient(order.clientId) && getClient(order.clientId).phone) || "", " ").concat(order.status, " ").concat(order.notes || "").toLowerCase().includes(q);
         var matchesDate = !date || dateKey(order.createdAt) === date;
         return matchesQuery && matchesDate;
@@ -667,59 +711,177 @@ function filterClients(query) {
 function renderClients() {
     document.getElementById("clients").innerHTML = "\n    <div class=\"card section-card\">\n      <div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Personas</p><h2>Clientes</h2></div><button class=\"primary\" data-action=\"newClient\">+ Nuevo cliente</button></div>\n      <div class=\"filters-row\"><input id=\"clientSearch\" data-search-clients placeholder=\"Buscar cliente por nombre, teléfono, autorizado o notas\" /></div>\n      <div id=\"clientsList\" class=\"client-card-grid\">".concat(clientCards(state.clients), "</div>\n    </div>");
 }
-function renderSchedule() {
-    var machines = __spreadArray(__spreadArray([], LaundryScheduler.machineNames("Lavado", state.settings.smallWashers).map(function (name) { return ({ type: "Lavado", name: name }); }), true), LaundryScheduler.machineNames("Secado", state.settings.dryers).map(function (name) { return ({ type: "Secado", name: name }); }), true);
-    var activeCycles = state.orders
+function scheduleMachines() {
+    return __spreadArray(__spreadArray([], LaundryScheduler.machineNames("Lavado", state.settings.smallWashers).map(function (name) { return ({ type: "Lavado", name: name }); }), true), LaundryScheduler.machineNames("Secado", state.settings.dryers).map(function (name) { return ({ type: "Secado", name: name }); }), true);
+}
+function activeScheduleCycles() {
+    var cycles = state.orders
         .filter(function (order) { return order.status !== "Retirado"; })
-        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle) { return (__assign(__assign({}, cycle), { order: order })); })); }, [])
+        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle, index) { return (__assign(__assign({}, cycle), { order: order, cycleIndex: index, cycleId: cycle.cycleId || String(order.id) + "-" + String(index) })); })); }, [])
         .filter(function (cycle) { return cycle.type !== "Preparación"; })
         .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
-    var weekDays = currentWeekDays(new Date("".concat(scheduleWeekStart, "T00:00:00")));
-    var openHour = Number(state.settings.openHour.split(":")[0]);
-    var closeHour = Number(state.settings.closeHour.split(":")[0]);
-    var hours = [];
-    for (var hourIndex = 0; hourIndex < Math.max(1, closeHour - openHour); hourIndex += 1)
-        hours.push(openHour + hourIndex);
-    var washDryMinutes = Number(state.settings.washingMinutes) + Number(state.settings.dryingMinutes);
-    var preview = "";
-    document.getElementById("schedule").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Turnero</p><h2>Agenda grande por hora</h2><p>Mostrando semana desde <strong>".concat(weekDays[0].toLocaleDateString("es-AR"), "</strong>. Un valet lavado + secado ocupa aprox. <strong>").concat(washDryMinutes, " minutos</strong>, pero la estimaci\u00F3n real depende de m\u00E1quinas libres.</p></div><div class=\"status-pill light\">").concat(state.settings.smallWashers, " lavarropas \u00B7 ").concat(state.settings.dryers, " secadoras</div></div>\n    <div class=\"card schedule-controls\"><button class=\"secondary\" data-action=\"prevWeek\">\u2190</button><label>Semana<input class=\"week-input\" type=\"date\" data-schedule-week value=\"").concat(scheduleWeekStart, "\" /></label><button class=\"secondary\" data-action=\"todayWeek\">Hoy</button><button class=\"secondary\" data-action=\"nextWeek\">\u2192</button>").concat(preview, "</div>\n    <div class=\"card schedule-card\"><h3>Semana seleccionada</h3><div class=\"timeline-grid\" style=\"--days:").concat(weekDays.length, "\">\n      <div class=\"timeline-head\">Hora</div>").concat(weekDays.map(function (day) { return "<div class=\"timeline-head\">".concat(day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" }), "</div>"); }).join(""), "\n      ").concat(hours.map(function (hour) { return "<div class=\"timeline-hour\">".concat(hourLabel(hour), "</div>").concat(weekDays.map(function (day) {
-        var cycles = activeCycles.filter(function (cycle) { return cycleOverlapsHour(cycle, day, hour); });
-        return "<div class=\"timeline-cell\">".concat(cycles.map(function (cycle) { return "<div class=\"timeline-event ".concat(cycle.type === "Lavado" ? "wash" : "dry", "\"><strong>").concat(escapeHtml(orderClient(cycle.order)), "</strong><span>").concat(escapeHtml(cycle.type), " \u00B7 ").concat(escapeHtml(cycle.machine), "</span><small>").concat(formatDateTime(cycle.start), " \u2192 ").concat(formatDateTime(cycle.end), "</small></div>"); }).join("") || "<span class=\"free-text\">Libre</span>", "</div>");
-    }).join("")); }).join(""), "\n    </div></div>\n    <div class=\"card\"><h3 class=\"machine-section-title\">Lavarropas</h3>").concat(machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles), "<h3 class=\"machine-section-title\">Secadoras</h3>").concat(machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles), "</div>");
+    return cycles;
 }
-function setScheduleWeek(value) {
-    scheduleWeekStart = currentWeekStart(new Date("".concat(value, "T00:00:00"))).toISOString().slice(0, 10);
+function scheduleVisibleDays() {
+    if (scheduleViewMode === "week")
+        return currentWeekDays(new Date("".concat(scheduleWeekStart, "T00:00:00")));
+    return [new Date("".concat(scheduleSelectedDate, "T00:00:00"))];
+}
+function setScheduleDate(value) {
+    scheduleSelectedDate = value || localDateInput();
+    scheduleWeekStart = currentWeekStart(new Date("".concat(scheduleSelectedDate, "T00:00:00"))).toISOString().slice(0, 10);
     renderSchedule();
 }
+function setScheduleViewMode(mode) {
+    scheduleViewMode = mode === "week" ? "week" : "day";
+    renderSchedule();
+}
+function scheduleTimeSlots() {
+    var openHour = Number(state.settings.openHour.split(":")[0]);
+    var closeHour = Number(state.settings.closeHour.split(":")[0]);
+    var slots = [];
+    var cursor = openHour * 60;
+    var end = closeHour * 60;
+    while (cursor < end) {
+        slots.push({ minutes: cursor, label: hourLabel(Math.floor(cursor / 60)).replace(":00", ":") + leftPad(cursor % 60, 2, "0") });
+        cursor += Number(scheduleSlotMinutes || 30);
+    }
+    return slots;
+}
+function cycleOverlapsRange(cycle, start, end) {
+    return new Date(cycle.start) < end && new Date(cycle.end) > start;
+}
+function machineConflicts(machineName, start, end, ignoreOrderId, ignoreCycleId) {
+    return activeScheduleCycles().filter(function (cycle) {
+        if (cycle.machine !== machineName)
+            return false;
+        if (ignoreOrderId && cycle.order.id === Number(ignoreOrderId) && String(cycle.cycleId) === String(ignoreCycleId))
+            return false;
+        return cycleOverlapsRange(cycle, start, end);
+    });
+}
+function nextFreeMachineSlot(type, durationMinutes, fromDate) {
+    var machines = scheduleMachines().filter(function (machine) { return machine.type === type; });
+    var cursor = LaundryScheduler.normalizeBusinessStart(fromDate || new Date(), state.settings);
+    var guard = 0;
+    while (guard < 80) {
+        for (var index = 0; index < machines.length; index += 1) {
+            var end = new Date(cursor.getTime() + Number(durationMinutes || 30) * 60000);
+            if (!machineConflicts(machines[index].name, cursor, end).length)
+                return { machine: machines[index].name, start: cursor, end: end };
+        }
+        cursor = new Date(cursor.getTime() + Number(scheduleSlotMinutes || 30) * 60000);
+        cursor = LaundryScheduler.normalizeBusinessStart(cursor, state.settings);
+        guard += 1;
+    }
+    return null;
+}
+function schedulePredictions(activeCycles, machines, days) {
+    var now = new Date();
+    var todayKey = dateKey(now);
+    var occupied = activeCycles.filter(function (cycle) { return cycleOverlapsRange(cycle, now, new Date(now.getTime() + 1)); });
+    var today = activeCycles.filter(function (cycle) { return dateKey(cycle.start) === todayKey; });
+    var wash = nextFreeMachineSlot("Lavado", state.settings.washingMinutes, now);
+    var dry = nextFreeMachineSlot("Secado", state.settings.dryingMinutes, now);
+    return { occupied: occupied.length, free: Math.max(0, machines.length - occupied.length), today: today.length, wash: wash, dry: dry, days: days.length };
+}
+function schedulePredictionHtml(prediction) {
+    return '<div class="schedule-prediction-strip"><article><span>Ahora libres</span><strong>'.concat(prediction.free, '</strong><small>Ocupadas: ').concat(prediction.occupied, '</small></article><article><span>Turnos hoy</span><strong>').concat(prediction.today, '</strong><small>Ciclos programados</small></article><article><span>Próximo lavado</span><strong>').concat(prediction.wash ? formatDateTime(prediction.wash.start) : 'Sin hueco', '</strong><small>').concat(prediction.wash ? escapeHtml(prediction.wash.machine) : 'Revisar agenda', '</small></article><article><span>Próximo secado</span><strong>').concat(prediction.dry ? formatDateTime(prediction.dry.start) : 'Sin hueco', '</strong><small>').concat(prediction.dry ? escapeHtml(prediction.dry.machine) : 'Revisar agenda', '</small></article></div>');
+}
+function renderSchedule() {
+    var machines = scheduleMachines();
+    var activeCycles = activeScheduleCycles();
+    var visibleDays = scheduleVisibleDays();
+    var slots = scheduleTimeSlots();
+    var prediction = schedulePredictions(activeCycles, machines, visibleDays);
+    var dayHeads = visibleDays.map(function (day) { return "<div class=\"timeline-head\">" + day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" }) + "</div>"; }).join("");
+    var slotRows = slots.map(function (slot) { return "<div class=\"timeline-hour\">" + escapeHtml(slot.label) + "</div>" + visibleDays.map(function (day) { return scheduleSlotHtml(day, slot, activeCycles); }).join(""); }).join("");
+    var html = "";
+    html += "<div class=\"card hero-card schedule-hero\"><div><p class=\"eyebrow-dark\">Turnos dinámicos</p><h2>Máquinas primero, calendario debajo</h2><p>La agenda se asigna automáticamente, pero cada lavado, secado o bloqueo se puede editar, mover o borrar desde esta pantalla.</p></div><div class=\"status-pill light\">" + state.settings.smallWashers + " lavarropas · " + state.settings.dryers + " secadoras</div></div>";
+    html += schedulePredictionHtml(prediction);
+    html += "<div class=\"card schedule-quick-actions\"><button class=\"primary\" data-action=\"openFreeSlotFinder\">Buscar hueco libre</button><button class=\"secondary\" data-action=\"openMachineBlockModal\">+ Bloqueo / mantenimiento</button><button class=\"secondary\" data-action=\"openUnscheduledOrdersModal\">Pedidos sin turno</button><button class=\"danger\" data-action=\"rescheduleActiveOrders\">Recalcular automático</button></div>";
+    html += "<div class=\"card schedule-machine-overview\"><div class=\"toolbar\"><div><p class=\"eyebrow-dark\">Arriba: estado actual</p><h3>Lavarropas y secadoras</h3></div><small>Click en una máquina para asignar, editar o borrar turnos.</small></div><h3 class=\"machine-section-title\">Lavarropas</h3>" + machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles) + "<h3 class=\"machine-section-title\">Secadoras</h3>" + machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles) + "</div>";
+    html += "<div class=\"card schedule-controls\"><button class=\"" + (scheduleViewMode === "day" ? "primary" : "secondary") + "\" data-action=\"scheduleViewMode\" data-mode=\"day\">Día</button><button class=\"" + (scheduleViewMode === "week" ? "primary" : "secondary") + "\" data-action=\"scheduleViewMode\" data-mode=\"week\">Semana</button><label>Fecha<input class=\"week-input\" type=\"date\" data-schedule-date value=\"" + escapeHtml(scheduleSelectedDate) + "\" /></label><button class=\"secondary\" data-action=\"prevWeek\">←</button><button class=\"secondary\" data-action=\"todayWeek\">Hoy</button><button class=\"secondary\" data-action=\"nextWeek\">→</button><label>Bloque<select data-schedule-slot><option value=\"15\" " + (scheduleSlotMinutes === 15 ? "selected" : "") + ">15 min</option><option value=\"30\" " + (scheduleSlotMinutes === 30 ? "selected" : "") + ">30 min</option><option value=\"60\" " + (scheduleSlotMinutes === 60 ? "selected" : "") + ">1 hora</option></select></label></div>";
+    html += "<div class=\"card schedule-calendar-panel\"><h3>Calendario de turnos</h3><div class=\"timeline-grid flexible-calendar\" style=\"--days:" + visibleDays.length + "\"><div class=\"timeline-head\">Hora</div>" + dayHeads + slotRows + "</div></div>";
+    document.getElementById("schedule").innerHTML = html;
+}
+
+function scheduleSlotHtml(day, slot, activeCycles) {
+    var start = new Date(day);
+    start.setHours(Math.floor(slot.minutes / 60), slot.minutes % 60, 0, 0);
+    var end = new Date(start.getTime() + Number(scheduleSlotMinutes || 30) * 60000);
+    var cycles = activeCycles.filter(function (cycle) { return cycleOverlapsRange(cycle, start, end); });
+    return "<div class=\"timeline-cell schedule-slot\">".concat(cycles.map(function (cycle) { return "<button class=\"timeline-event ".concat(cycle.type === "Lavado" ? "wash" : cycle.type === "Bloqueo" ? "blocked-slot" : "dry", "\" data-action=\"openCycleEdit\" data-id=\"").concat(cycle.order.id, "\" data-cycle-id=\"").concat(escapeHtml(cycle.cycleId), "\"><strong>").concat(escapeHtml(cycle.type === "Bloqueo" ? cycle.description || "Bloqueo" : orderClient(cycle.order)), "</strong><span>").concat(escapeHtml(cycle.type), " · ").concat(escapeHtml(cycle.machine), "</span><small>").concat(formatDateTime(cycle.start), " → ").concat(formatDateTime(cycle.end), "</small></button>"); }).join("") || "<span class=\"free-text\">Libre</span>", "</div>");
+}
+function setScheduleWeek(value) {
+    setScheduleDate(value);
+}
 function moveScheduleWeek(days) {
-    var next = new Date("".concat(scheduleWeekStart, "T00:00:00"));
+    var next = new Date("".concat(scheduleSelectedDate, "T00:00:00"));
     next.setDate(next.getDate() + days);
-    setScheduleWeek(next.toISOString().slice(0, 10));
+    setScheduleDate(next.toISOString().slice(0, 10));
 }
 function machineBoard(machines, activeCycles) {
-    return "<div class=\"machine-board\">".concat(machines.map(function (machine) {
+    var now = new Date();
+    return "<div class=\"machine-board dynamic-machine-board\">".concat(machines.map(function (machine) {
         var assigned = activeCycles.filter(function (cycle) { return cycle.machine === machine.name; }).slice(0, 8);
-        return "<button class=\"machine machine-click type-".concat(normalizeClass(machine.type), " ").concat(assigned.length ? "occupied" : "free-machine", "\" data-action=\"machineEdit\" data-machine=\"").concat(escapeHtml(machine.name), "\"><h4>").concat(escapeHtml(machine.name), "</h4><span class=\"badge ").concat(assigned.length ? "blocked" : "free-machine-badge", "\">").concat(assigned.length ? "Ocupada" : "Libre", "</span>").concat(assigned.map(function (cycle) { return "<div class=\"slot\"><strong>".concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong><br><span>").concat(escapeHtml(orderClient(cycle.order)), "</span></div>"); }).join("") || "<div class=\"slot\">Disponible</div>", "</button>");
+        var current = assigned.filter(function (cycle) { return cycleOverlapsRange(cycle, now, new Date(now.getTime() + 1)); });
+        var next = assigned.filter(function (cycle) { return new Date(cycle.start) >= now; })[0];
+        return "<button class=\"machine machine-click machine-status-card type-".concat(normalizeClass(machine.type), " ").concat(current.length ? "occupied" : "free-machine", "\" data-action=\"machineEdit\" data-machine=\"").concat(escapeHtml(machine.name), "\"><h4>").concat(escapeHtml(machine.name), "</h4><span class=\"badge ").concat(current.length ? "blocked" : "free-machine-badge", "\">").concat(current.length ? "En uso" : "Libre ahora", "</span><small>").concat(next ? "Próximo: " + formatDateTime(next.start) : "Sin próximos turnos", "</small>").concat(assigned.map(function (cycle) { return "<div class=\"slot\"><strong>".concat(escapeHtml(cycle.type === "Bloqueo" ? "Bloqueo" : orderDisplayCode(cycle.order)), "</strong><br><span>").concat(escapeHtml(cycle.type), " · ").concat(formatDateTime(cycle.start), "</span></div>"); }).join("") || "<div class=\"slot\">Disponible</div>", "</button>");
     }).join(""), "</div>");
+}
+function cycleOptionHtml(selected) {
+    return '<option '.concat(selected === "Lavado" ? "selected" : "", '>Lavado</option><option ').concat(selected === "Secado" ? "selected" : "", '>Secado</option><option ').concat(selected === "Bloqueo" ? "selected" : "", '>Bloqueo</option><option ').concat(selected === "Preparación" ? "selected" : "", '>Preparación</option>');
+}
+function machineOptionsHtml(selected) {
+    return scheduleMachines().map(function (machine) { return '<option value="'.concat(escapeHtml(machine.name), '" ').concat(machine.name === selected ? 'selected' : '', '>').concat(escapeHtml(machine.name), '</option>'); }).join('');
+}
+function updateSchedulePreview(container) {
+    if (!container)
+        return;
+    var target = container.querySelector(".schedule-preview-note");
+    if (!target)
+        return;
+    var startInput = container.querySelector('[name="start"]');
+    var minutesInput = container.querySelector('[name="minutes"]');
+    var machineSelect = container.querySelector('[name="machine"]');
+    var machineButton = container.querySelector('[data-action="saveMachineSlot"]');
+    var machine = machineSelect ? machineSelect.value : machineButton ? machineButton.getAttribute("data-machine") : "";
+    var start = startInput ? new Date(startInput.value) : null;
+    var minutes = minutesInput ? Number(minutesInput.value || 0) : 0;
+    if (!start || isNaN(start.getTime()) || !minutes) {
+        target.textContent = "Vista previa: completá inicio y duración.";
+        return;
+    }
+    var end = new Date(start.getTime() + minutes * 60000);
+    var conflicts = machine ? machineConflicts(machine, start, end) : [];
+    var openMinutes = Number(state.settings.openHour.split(":")[0]) * 60;
+    var closeMinutes = Number(state.settings.closeHour.split(":")[0]) * 60;
+    var startMinutes = start.getHours() * 60 + start.getMinutes();
+    var endMinutes = end.getHours() * 60 + end.getMinutes();
+    var outside = startMinutes < openMinutes || endMinutes > closeMinutes;
+    target.textContent = "Vista previa: termina " + formatDateTime(end) + (conflicts.length ? " · se superpone con " + conflicts.length + " turno(s)" : " · sin superposición") + (outside ? " · fuera del horario configurado" : "");
 }
 function openMachineModal(machineName) {
     selectedMachine = machineName;
-    var assigned = state.orders
-        .filter(function (order) { return order.status !== "Retirado"; })
-        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle, index) { return (__assign(__assign({}, cycle), { order: order, cycleIndex: index })); })); }, [])
-        .filter(function (cycle) { return cycle.machine === machineName; })
-        .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
-    var orderOptions = state.orders.filter(function (order) { return order.status !== "Retirado"; }).map(function (order) { return "<option value=\"".concat(order.id, "\">").concat(escapeHtml(orderDisplayCode(order)), " · ").concat(escapeHtml(orderClient(order)), "</option>"); }).join("");
-    var assignedHtml = assigned.map(function (cycle) { return "<button class=\"slot machine-slot\" data-action=\"viewOrder\" data-id=\"".concat(cycle.order.id, "\"><strong>").concat(escapeHtml(orderDisplayCode(cycle.order)), "</strong>").concat(escapeHtml(orderClient(cycle.order)), "<small>").concat(formatDateTime(cycle.start), " → ").concat(formatDateTime(cycle.end), "</small></button>"); }).join("") || "<p>Máquina libre. No hay pedidos asignados.</p>";
+    var assigned = activeScheduleCycles().filter(function (cycle) { return cycle.machine === machineName; });
+    var orderOptions = operationalOrders().filter(function (order) { return order.status !== "Retirado"; }).map(function (order) { return "<option value=\"".concat(order.id, "\">").concat(escapeHtml(orderDisplayCode(order)), " · ").concat(escapeHtml(orderClient(order)), "</option>"); }).join("");
+    var assignedHtml = assigned.map(function (cycle) { return "<article class=\"slot machine-slot\"><strong>".concat(escapeHtml(cycle.type === "Bloqueo" ? cycle.description || "Bloqueo" : orderDisplayCode(cycle.order)), "</strong><span>").concat(escapeHtml(cycle.type), " · ").concat(escapeHtml(orderClient(cycle.order)), "</span><small>").concat(formatDateTime(cycle.start), " → ").concat(formatDateTime(cycle.end), "</small><div class=\"actions\"><button class=\"secondary\" data-action=\"openCycleEdit\" data-id=\"").concat(cycle.order.id, "\" data-cycle-id=\"").concat(escapeHtml(cycle.cycleId), "\">Editar / mover</button><button class=\"danger\" data-action=\"deleteCycle\" data-id=\"").concat(cycle.order.id, "\" data-cycle-id=\"").concat(escapeHtml(cycle.cycleId), "\">Borrar</button><button class=\"secondary\" data-action=\"viewOrder\" data-id=\"").concat(cycle.order.id, "\">Pedido</button></div></article>"); }).join("") || "<p>Máquina libre. No hay pedidos asignados.</p>";
     var html = "<div class=\"machine-modal-list\">" + assignedHtml + "</div>" +
         "<form class=\"form-grid machine-assign-form\">" +
         "<label class=\"full\">Pedido<select name=\"orderId\" required>" + (orderOptions || "<option value=\"\">No hay pedidos activos</option>") + "</select></label>" +
         "<label>Tipo<select name=\"type\"><option>Lavado</option><option>Secado</option><option>Preparación</option></select></label>" +
-        "<label>Inicio<input name=\"start\" type=\"datetime-local\" required /></label>" +
-        "<label>Minutos<input name=\"minutes\" type=\"number\" min=\"1\" value=\"30\" required /></label>" +
-        "<button class=\"primary full\" type=\"button\" data-action=\"saveMachineSlot\" data-machine=\"" + escapeHtml(machineName) + "\">Asignar a esta máquina</button>" +
+        "<label>Inicio<input name=\"start\" type=\"datetime-local\" required data-preview-field /></label>" +
+        "<label>Minutos<input name=\"minutes\" type=\"number\" min=\"1\" value=\"30\" required data-preview-field /></label>" +
+        "<p class=\"full schedule-preview-note\">Vista previa: completá inicio y duración.</p><button class=\"primary full\" type=\"button\" data-action=\"saveMachineSlot\" data-machine=\"" + escapeHtml(machineName) + "\">Asignar a esta máquina</button>" +
         "</form>";
     openModal("Máquina ".concat(escapeHtml(machineName)), html);
+}
+function addCycleToOrder(order, cycle) {
+    order.cycles = order.cycles || [];
+    cycle.cycleId = cycle.cycleId || nextCycleId(order.id, order.cycles.length);
+    order.cycles.push(cycle);
+    refreshOrderEstimate(order);
 }
 function saveMachineSlot(button) {
     var form = button.closest("form");
@@ -740,16 +902,126 @@ function saveMachineSlot(button) {
         return;
     }
     var end = new Date(start.getTime() + minutes * 60000);
-    order.cycles = order.cycles || [];
-    order.cycles.push({ type: data.type || "Preparación", machine: button.getAttribute("data-machine"), start: start.toISOString(), end: end.toISOString(), minutes: minutes, manual: true });
-    order.estimate = order.cycles.reduce(function (latest, cycle) { return new Date(cycle.end) > new Date(latest) ? cycle.end : latest; }, order.estimate || end.toISOString());
+    var conflicts = machineConflicts(button.getAttribute("data-machine"), start, end);
+    if (conflicts.length && !confirm("Ese horario se superpone con otro turno. ¿Guardar igual?"))
+        return;
+    addCycleToOrder(order, { type: data.type || "Preparación", machine: button.getAttribute("data-machine"), start: start.toISOString(), end: end.toISOString(), minutes: minutes, manual: true });
     saveState();
     closeModal();
     render();
 }
+function findOrderCycle(orderId, cycleId) {
+    var order = getOrder(orderId);
+    if (!order)
+        return null;
+    ensureOrderCycleIds(order);
+    for (var index = 0; index < (order.cycles || []).length; index += 1) {
+        if (String(order.cycles[index].cycleId) === String(cycleId))
+            return { order: order, cycle: order.cycles[index], index: index };
+    }
+    return null;
+}
+function openCycleEditModal(orderId, cycleId) {
+    var found = findOrderCycle(orderId, cycleId);
+    if (!found)
+        return;
+    var cycle = found.cycle;
+    var start = localDateTimeValue(cycle.start);
+    var html = '<form class="form-grid"><label>Máquina<select name="machine" data-preview-field>'.concat(machineOptionsHtml(cycle.machine), '</select></label><label>Tipo<select name="type">').concat(cycleOptionHtml(cycle.type), '</select></label><label>Inicio<input name="start" type="datetime-local" required data-preview-field value="').concat(escapeHtml(start), '" /></label><label>Minutos<input name="minutes" type="number" min="1" required data-preview-field value="').concat(Number(cycle.minutes || Math.max(1, Math.round((new Date(cycle.end) - new Date(cycle.start)) / 60000))), '" /></label><p class="full schedule-preview-note">Vista previa: cambiá inicio, duración o máquina para recalcular.</p><label class="full">Descripción / nota<input name="description" value="').concat(escapeHtml(cycle.description || ""), '" /></label><button class="primary full" type="button" data-action="saveCycleEdit" data-id="').concat(found.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '">Guardar turno</button></form>');
+    openModal("Editar turno", html);
+}
+function localDateTimeValue(value) {
+    var date = new Date(value);
+    if (isNaN(date.getTime()))
+        return "";
+    return date.getFullYear() + "-" + leftPad(date.getMonth() + 1, 2, "0") + "-" + leftPad(date.getDate(), 2, "0") + "T" + leftPad(date.getHours(), 2, "0") + ":" + leftPad(date.getMinutes(), 2, "0");
+}
+function saveCycleEdit(button) {
+    var found = findOrderCycle(button.getAttribute("data-id"), button.getAttribute("data-cycle-id"));
+    if (!found)
+        return;
+    var data = formDataToObject(button.closest("form"));
+    var start = new Date(data.start);
+    var minutes = Number(data.minutes || 0);
+    if (isNaN(start.getTime()) || !minutes) {
+        alert("Revisá inicio y duración.");
+        return;
+    }
+    var end = new Date(start.getTime() + minutes * 60000);
+    var conflicts = machineConflicts(data.machine, start, end, found.order.id, found.cycle.cycleId);
+    if (conflicts.length && !confirm("Ese horario se superpone con otro turno. ¿Guardar igual?"))
+        return;
+    found.cycle.machine = data.machine;
+    found.cycle.type = data.type;
+    found.cycle.start = start.toISOString();
+    found.cycle.end = end.toISOString();
+    found.cycle.minutes = minutes;
+    found.cycle.description = data.description || "";
+    found.cycle.manual = true;
+    refreshOrderEstimate(found.order);
+    saveState();
+    closeModal();
+    render();
+}
+function deleteCycle(orderId, cycleId) {
+    var found = findOrderCycle(orderId, cycleId);
+    if (!found || !confirm("¿Borrar este turno?"))
+        return;
+    found.order.cycles.splice(found.index, 1);
+    refreshOrderEstimate(found.order);
+    saveState();
+    closeModal();
+    render();
+}
+function openMachineBlockModal() {
+    var html = '<form class="form-grid"><label>Máquina<select name="machine" data-preview-field>'.concat(machineOptionsHtml(""), '</select></label><label>Inicio<input name="start" type="datetime-local" required data-preview-field /></label><label>Minutos<input name="minutes" type="number" min="1" value="60" required data-preview-field /></label><p class="full schedule-preview-note">Vista previa: completá inicio y duración.</p><label class="full">Motivo<input name="description" value="Mantenimiento" /></label><button class="primary full" type="button" data-action="saveMachineBlock">Guardar bloqueo</button></form>');
+    openModal("Bloqueo / mantenimiento", html);
+}
+function saveMachineBlock(button) {
+    var data = formDataToObject(button.closest("form"));
+    var start = new Date(data.start);
+    var minutes = Number(data.minutes || 0);
+    if (isNaN(start.getTime()) || !minutes) {
+        alert("Revisá inicio y duración.");
+        return;
+    }
+    var blockOrder = { id: nextId(state.orders), number: "", clientId: 0, serviceId: 0, createdAt: new Date().toISOString(), estimate: start.toISOString(), cycles: [], status: "Pendiente", items: [{ name: data.description || "Bloqueo", quantity: 1, price: 0 }], total: 0, location: "", notes: "Bloqueo de máquina", paymentStatus: "Pendiente", paymentMethod: "Efectivo", block: true };
+    blockOrder.number = "B#" + fourDigitId(blockOrder.id);
+    addCycleToOrder(blockOrder, { type: "Bloqueo", machine: data.machine, start: start.toISOString(), end: new Date(start.getTime() + minutes * 60000).toISOString(), minutes: minutes, manual: true, description: data.description || "Bloqueo" });
+    state.orders.push(blockOrder);
+    saveState();
+    closeModal();
+    render();
+}
+function rescheduleActiveOrders() {
+    if (!confirm("¿Recalcular automáticamente todos los pedidos activos? Se reemplazan los turnos no manuales."))
+        return;
+    var orders = state.orders.filter(function (order) { return order.status !== "Retirado" && !order.block; });
+    orders.forEach(function (order) {
+        var manual = (order.cycles || []).filter(function (cycle) { return cycle.manual; });
+        var service = getService(order.serviceId) || state.services[0];
+        order.cycles = manual;
+        var scheduled = LaundryScheduler.scheduleOrder(state.orders, service, state.settings, order.createdAt || new Date().toISOString());
+        order.cycles = manual.concat(scheduled.cycles);
+        ensureOrderCycleIds(order);
+        refreshOrderEstimate(order);
+    });
+    saveState();
+    render();
+}
+function openFreeSlotFinder() {
+    var wash = nextFreeMachineSlot("Lavado", state.settings.washingMinutes, new Date());
+    var dry = nextFreeMachineSlot("Secado", state.settings.dryingMinutes, new Date());
+    openModal("Huecos libres", '<div class="schedule-free-slots"><article><h3>Lavado</h3><p>'.concat(wash ? escapeHtml(wash.machine) + ' · ' + formatDateTime(wash.start) : 'Sin hueco cercano', '</p></article><article><h3>Secado</h3><p>').concat(dry ? escapeHtml(dry.machine) + ' · ' + formatDateTime(dry.start) : 'Sin hueco cercano', '</p></article></div>'));
+}
+function openUnscheduledOrdersModal() {
+    var orders = operationalOrders().filter(function (order) { return order.status !== "Retirado" && !(order.cycles || []).length; });
+    openModal("Pedidos sin turno", '<div class="history-list">'.concat(orders.map(function (order) { return '<article class="history-item"><strong>'.concat(escapeHtml(orderDisplayCode(order)), '</strong><span>').concat(escapeHtml(orderClient(order)), '</span><button class="secondary" data-action="viewOrder" data-id="').concat(order.id, '">Ver</button></article>'); }).join('') || '<p>No hay pedidos sin turno.</p>', '</div>'));
+}
+
 function renderStorage() {
     var occupied = {};
-    state.orders.filter(function (order) { return order.location && order.status !== "Retirado"; }).forEach(function (order) {
+    operationalOrders().filter(function (order) { return order.location && order.status !== "Retirado"; }).forEach(function (order) {
         occupied[order.location] = order;
     });
     document.getElementById("storage").innerHTML = "\n    <div class=\"card hero-card\"><div><p class=\"eyebrow-dark\">Dep\u00F3sito</p><h2>Ubicaciones y aviso de guarda</h2><p>Hac\u00E9 clic en una ubicaci\u00F3n ocupada para abrir el pedido correspondiente.</p></div><button class=\"secondary\" data-action=\"storageNotice\">Ver aviso general</button></div>\n    <div class=\"storage-grid\">".concat(state.locations.map(function (location) {
@@ -896,6 +1168,7 @@ function openOrderModal() {
         var location = data.location || nextFreeLocation();
         var total = orderItemsTotal(items);
         var order = { id: orderId, number: "", clientId: Number(selectedClientId), serviceId: Number(primaryService.id), createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+        ensureOrderCycleIds(order);
         order.number = orderDisplayCode(order);
         state.orders.push(order);
         if (order.paymentStatus === "Abonado")
@@ -970,7 +1243,7 @@ function openClientHistoryModal(id) {
     var client = getClient(id);
     if (!client)
         return;
-    var orders = state.orders.filter(function (order) { return order.clientId === Number(id); }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    var orders = operationalOrders().filter(function (order) { return order.clientId === Number(id); }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     openModal("Historial de ".concat(escapeHtml(client.name)), orderHistoryRows(orders));
 }
 function orderDetailHtml(order) {
@@ -1280,6 +1553,7 @@ function importOrdersCsv(rows) {
         var location = csvValue(row, headers, ["deposito", "depósito", "location"]) || nextFreeLocation();
         var items = [{ name: itemName, quantity: quantity, serviceId: service.id, serviceName: service.name, price: price }];
         var order = { id: orderId, number: "", clientId: client.id, serviceId: service.id, createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: csvValue(row, headers, ["estado", "status"]) || "Pendiente", items: items, total: orderItemsTotal(items), location: location, notes: csvValue(row, headers, ["notas", "notes", "observaciones"]), paymentStatus: csvValue(row, headers, ["pago", "paymentstatus"]) || "Pendiente", paymentMethod: csvValue(row, headers, ["medio", "paymentmethod"]) || "Efectivo" };
+        ensureOrderCycleIds(order);
         order.number = orderDisplayCode(order);
         state.orders.push(order);
         if (order.paymentStatus === "Abonado")

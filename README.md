@@ -27,8 +27,8 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
-- Turnos visuales con agenda grande por hora y por día de la semana, selector de semana para probar cualquier fecha y lectura visual de disponibilidad por máquinas.
-- Asignación automática de ciclos por disponibilidad real de lavarropas/secadoras, con opción de abrir una máquina y agregar manualmente otro pedido.
+- Turnos rediseñados con máquinas arriba, predicción de próximos huecos libres, acciones rápidas, vista día/semana, bloques de 15/30/60 minutos y calendario debajo.
+- Asignación automática de ciclos por disponibilidad real de lavarropas/secadoras, con opción de abrir una máquina para agregar, editar, mover o borrar turnos y cargar bloqueos de mantenimiento.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
 - Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido; al hacer clic se abre la vista del pedido sin editarlo, más cartel/aviso configurable para pedidos no retirados.
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
@@ -46,6 +46,15 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 5. Usar **WhatsApp** para elegir entre recibido, listo o retirado; el sistema agrega automáticamente si está pago o pendiente.
 6. Al retirar, cambiar el estado a **Retirado** y registrar el pago si corresponde.
 7. Revisar caja con la clave del dueño cada vez que se entra; al cerrar el día tocar **Empezar nuevo día** para pasar los movimientos al histórico y poder exportarlo desde **Caja → Exportar caja histórica CSV**. En **Métricas**, el botón **Exportar caja mensual CSV** descarga únicamente el mes seleccionado.
+
+### Nuevo flujo de Turnos
+
+La sección **Turnos** prioriza la operación diaria:
+
+1. Arriba muestra predicciones: máquinas libres/ocupadas, turnos de hoy y próximo hueco de lavado/secado.
+2. Debajo muestra primero las tarjetas de **Lavarropas** y **Secadoras**; cada máquina se puede abrir para asignar un pedido, editar/mover turnos existentes o borrarlos, con vista previa de fin y superposiciones.
+3. Las acciones rápidas permiten buscar huecos libres, crear bloqueos/mantenimiento, revisar pedidos sin turno y recalcular automáticamente la agenda activa.
+4. El calendario queda debajo de las máquinas y puede alternar entre vista **Día** y **Semana**, con granularidad de 15, 30 o 60 minutos.
 
 ### Importar CSV desde Configuración
 

@@ -57,6 +57,23 @@ for (const feature of [
   'filterClients',
   'clientCards',
   'authorizedPickups',
+  'openUnscheduledOrdersModal',
+  'openFreeSlotFinder',
+  'rescheduleActiveOrders',
+  'saveMachineBlock',
+  'openMachineBlockModal',
+  'deleteCycle',
+  'saveCycleEdit',
+  'openCycleEditModal',
+  'nextFreeMachineSlot',
+  'machineConflicts',
+  'cycleOverlapsRange',
+  'scheduleTimeSlots',
+  'scheduleVisibleDays',
+  'schedulePredictions',
+  'activeScheduleCycles',
+  'scheduleMachines',
+  'updateSchedulePreview',
   'importCsvData',
   'importClientsCsv',
   'importOrdersCsv',
@@ -94,6 +111,13 @@ assert.match(app, /class=\\"primary\\" data-action=\\"editClient\\"/, 'client ed
 assert.match(app, /data-search-clients|filterClients/, 'clients should include search');
 assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks should open read-only order view');
 assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignment');
+assert.match(app, /Máquinas primero, calendario debajo[\s\S]*schedule-machine-overview[\s\S]*schedule-calendar-panel/, 'schedule should show machines above the calendar');
+assert.match(app, /scheduleViewMode[\s\S]*Día[\s\S]*Semana[\s\S]*data-schedule-slot/, 'schedule should support day/week and slot granularity controls');
+assert.match(app, /openCycleEditModal[\s\S]*saveCycleEdit[\s\S]*deleteCycle/, 'schedule cycles should be editable and removable');
+assert.match(app, /openMachineBlockModal[\s\S]*saveMachineBlock[\s\S]*Bloqueo/, 'schedule should support machine blocks');
+assert.match(app, /schedulePredictions[\s\S]*nextFreeMachineSlot/, 'schedule should include predictive availability');
+assert.match(app, /updateSchedulePreview[\s\S]*schedule-preview-note[\s\S]*data-preview-field/, 'schedule edit modals should include live schedule preview feedback');
+
 assert.match(app, /wasPaidBeforeRetired/, 'retired state should remember previous payment status');
 assert.match(app, /orderItemsHtml/, 'orders should render itemized garments with prices');
 assert.doesNotMatch(app, /escapeHtml\(itemSummary\(order\)\).*formatDateTime/, 'order header should not duplicate item summary above item list');
@@ -128,7 +152,7 @@ assert.match(app, /if \(view === "cash" \|\| view === "cashReports"\)[\s\S]{0,80
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 
