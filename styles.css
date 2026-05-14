@@ -448,3 +448,21 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
   .schedule-simple-hero, .simple-section-title { align-items: stretch; flex-direction: column; }
   .simple-schedule-summary, .simple-manual-actions, .simple-calendar-controls, .simple-agenda-row { grid-template-columns: 1fr; }
 }
+
+/* Turnos sin calendario separado */
+.simple-date-picker { align-items: center; color: var(--muted); display: flex; font-weight: 900; gap: 8px; }
+.machine-simple-status { border-radius: 22px; display: grid; gap: 6px; padding: 18px; }
+.machine-simple-status span { font-size: 22px; font-weight: 1000; }
+.machine-simple-status strong { font-size: 24px; }
+.machine-simple-status small { font-weight: 900; }
+.machine-simple-status.free { background: #ebfbee; border: 3px solid #69db7c; color: #2b8a3e; }
+.machine-simple-status.busy { background: #e7f5ff; border: 3px solid #74c0fc; color: #1864ab; }
+.machine-simple-actions { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.simple-assign-details { border: 2px solid var(--line); border-radius: 18px; padding: 12px; }
+.simple-assign-details summary { color: var(--primary-dark); cursor: pointer; font-size: 20px; font-weight: 1000; }
+.simple-assign-details .simple-assign-form { border-top: 0; margin-top: 12px; padding-top: 0; }
+
+@media (max-width: 920px) {
+  .machine-simple-actions { grid-template-columns: 1fr; }
+  .simple-date-picker { align-items: stretch; flex-direction: column; }
+}

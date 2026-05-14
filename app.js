@@ -550,6 +550,7 @@ document.addEventListener("click", function (event) {
         sendStorageNotice: function () { return sendStorageNotice(id); },
         machineEdit: function () { return openMachineModal(target.getAttribute("data-machine")); },
         saveMachineSlot: function () { return saveMachineSlot(target); },
+        saveQuickMachineSlot: function () { return saveQuickMachineSlot(target); },
         cashIncome: function () { return openCashModal("Ingreso"); },
         cashExpense: function () { return openCashModal("Egreso"); },
         openDeleteCashModal: openDeleteCashModal,
@@ -849,27 +850,26 @@ function toggleScheduleAdvancedMode() {
 function renderSchedule() {
     var machines = scheduleMachines();
     var activeCycles = activeScheduleCycles();
-    var visibleDays = scheduleVisibleDays();
-    var slots = scheduleTimeSlots();
-    var prediction = schedulePredictions(activeCycles, machines, visibleDays);
-    var dayHeads = visibleDays.map(function (day) { return "<div class=\"timeline-head\">" + day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" }) + "</div>"; }).join("");
-    var slotRows = slots.map(function (slot) { return "<div class=\"timeline-hour\">" + escapeHtml(slot.label) + "</div>" + visibleDays.map(function (day) { return scheduleSlotHtml(day, slot, activeCycles); }).join(""); }).join("");
+    var prediction = schedulePredictions(activeCycles, machines, [new Date(scheduleSelectedDate + "T00:00:00")]);
     var html = "";
-    html += "<div class=\"card schedule-simple-hero\"><div><p class=\"eyebrow-dark\">Turnos</p><h2>Máquinas de hoy</h2><p class=\"schedule-help\">Solo mirá si está libre u ocupada. Tocá una máquina para agregar o mover un trabajo.</p></div><button class=\"primary schedule-main-action\" data-action=\"assignNextOrder\">+ Asignar pedido</button></div>";
+    html += "<div class=\"card schedule-simple-hero\"><div><p class=\"eyebrow-dark\">Turnos</p><h2>Máquinas de hoy</h2><p class=\"schedule-help\">Sin calendario aparte: máquinas, agenda del día y acciones simples.</p></div><button class=\"primary schedule-main-action\" data-action=\"assignNextOrder\">+ Asignar pedido</button></div>";
     html += schedulePrimarySummary(prediction);
     html += "<div class=\"card schedule-machine-overview simple-machine-panel\"><div class=\"simple-section-title\"><h3>Lavarropas</h3><small>Verde libre · Azul ocupado</small></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles) + "<div class=\"simple-section-title\"><h3>Secadoras</h3><small>Verde libre · Azul ocupado</small></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles) + "</div>";
     html += scheduleDayAgendaHtml(activeCycles, new Date(scheduleSelectedDate + "T00:00:00"));
-    html += "<details class=\"card schedule-advanced-actions simple-advanced\"><summary><strong>Opciones manuales</strong><span>solo si necesitás ajustar algo</span></summary><div class=\"schedule-quick-actions simple-manual-actions\"><button class=\"secondary\" data-action=\"openMachineBlockModal\">Reservar máquina</button><button class=\"secondary\" data-action=\"openUnscheduledOrdersModal\">Pedidos sin máquina</button><button class=\"secondary\" data-action=\"openFreeSlotFinder\">Buscar libre</button><button class=\"secondary\" data-action=\"rescheduleActiveOrders\">Reordenar</button></div><div class=\"schedule-controls simple-calendar-controls\"><button class=\"" + (scheduleViewMode === "day" ? "primary" : "secondary") + "\" data-action=\"scheduleViewMode\" data-mode=\"day\">Día</button><button class=\"" + (scheduleViewMode === "week" ? "primary" : "secondary") + "\" data-action=\"scheduleViewMode\" data-mode=\"week\">Semana</button><label>Fecha<input class=\"week-input\" type=\"date\" data-schedule-date value=\"" + escapeHtml(scheduleSelectedDate) + "\" /></label><label>Vista<select data-schedule-slot><option value=\"30\" " + (scheduleSlotMinutes === 30 ? "selected" : "") + ">30 min</option><option value=\"60\" " + (scheduleSlotMinutes === 60 ? "selected" : "") + ">1 hora</option><option value=\"15\" " + (scheduleSlotMinutes === 15 ? "selected" : "") + ">15 min</option></select></label></div><div class=\"schedule-calendar-panel simple-calendar-panel\"><h3>Calendario</h3><div class=\"timeline-grid flexible-calendar\" style=\"--days:" + visibleDays.length + "\"><div class=\"timeline-head\">Hora</div>" + dayHeads + slotRows + "</div></div></details>";
+    html += "<details class=\"card schedule-advanced-actions simple-advanced\"><summary><strong>Opciones manuales</strong><span>solo si necesitás ajustar algo</span></summary><div class=\"schedule-quick-actions simple-manual-actions\"><button class=\"secondary\" data-action=\"openMachineBlockModal\">Reservar máquina</button><button class=\"secondary\" data-action=\"openUnscheduledOrdersModal\">Pedidos sin máquina</button><button class=\"secondary\" data-action=\"openFreeSlotFinder\">Buscar libre</button><button class=\"secondary\" data-action=\"rescheduleActiveOrders\">Reordenar</button></div></details>";
     document.getElementById("schedule").innerHTML = html;
 }
+
 function scheduleDayAgendaHtml(activeCycles, selectedDate) {
     var key = dateKey(selectedDate);
     var dayCycles = activeCycles.filter(function (cycle) { return dateKey(cycle.start) === key; });
+    var header = '<div class="simple-section-title"><h3>Agenda de hoy</h3><label class="simple-date-picker">Fecha <input class="week-input" type="date" data-schedule-date value="' + escapeHtml(scheduleSelectedDate) + '" /></label></div>';
     if (!dayCycles.length)
-        return '<div class="card day-agenda simple-day-agenda empty-schedule-state"><h3>Agenda de hoy</h3><p>No hay trabajos cargados para hoy.</p></div>';
+        return '<div class="card day-agenda simple-day-agenda empty-schedule-state">' + header + '<p>No hay trabajos cargados para este día.</p></div>';
     dayCycles.sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
-    return '<div class="card day-agenda simple-day-agenda"><div class="simple-section-title"><h3>Agenda de hoy</h3><small>' + escapeHtml(key) + '</small></div>' + dayCycles.map(function (cycle) { return '<button class="simple-agenda-row" data-action="openCycleEdit" data-id="' + cycle.order.id + '" data-cycle-id="' + escapeHtml(cycle.cycleId) + '"><strong>' + formatShortDateTime(cycle.start).slice(-5) + '</strong><span>' + escapeHtml(cycle.machine) + '</span><em>' + escapeHtml(cyclePersonLabel(cycle)) + '</em></button>'; }).join('') + '</div>';
+    return '<div class="card day-agenda simple-day-agenda">' + header + dayCycles.map(function (cycle) { return '<button class="simple-agenda-row" data-action="openCycleEdit" data-id="' + cycle.order.id + '" data-cycle-id="' + escapeHtml(cycle.cycleId) + '"><strong>' + formatShortDateTime(cycle.start).slice(-5) + '</strong><span>' + escapeHtml(cycle.machine) + '</span><em>' + escapeHtml(cyclePersonLabel(cycle)) + '</em></button>'; }).join('') + '</div>';
 }
+
 function scheduleAgendaGroup(cycles, label) {
     cycles.sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
     return '<section class="agenda-group"><h4>' + escapeHtml(label) + '</h4>' + (cycles.map(function (cycle) { return '<article class="agenda-item"><div class="agenda-time"><strong>' + formatShortDateTime(cycle.start).slice(-5) + ' - ' + formatShortDateTime(cycle.end).slice(-5) + '</strong><small>' + escapeHtml(cycle.type) + '</small></div><div class="agenda-machine">' + escapeHtml(cycle.machine) + '</div><div><strong>' + escapeHtml(cyclePersonLabel(cycle)) + '</strong></div><div class="actions mini"><button class="secondary" data-action="openCycleEdit" data-id="' + cycle.order.id + '" data-cycle-id="' + escapeHtml(cycle.cycleId) + '">Mover</button></div></article>'; }).join('') || '<p class="schedule-help">Sin trabajos.</p>') + '</section>';
@@ -933,21 +933,18 @@ function updateSchedulePreview(container) {
 }
 function openMachineModal(machineName) {
     selectedMachine = machineName;
-    var assigned = activeScheduleCycles().filter(function (cycle) { return cycle.machine === machineName; });
+    var activeCycles = activeScheduleCycles();
+    var current = currentCycleForMachine(machineName, activeCycles);
+    var next = nextCycleForMachine(machineName, activeCycles);
     var machineType = machineName.indexOf("Secadora") === 0 ? "Secado" : "Lavado";
     var defaultMinutes = machineType === "Secado" ? state.settings.dryingMinutes : state.settings.washingMinutes;
     var orderOptions = operationalOrders().filter(function (order) { return order.status === "Pendiente"; }).map(function (order) { return "<option value=\"".concat(order.id, "\">").concat(escapeHtml(orderDisplayCode(order)), " · ").concat(escapeHtml(orderClient(order)), "</option>"); }).join("");
-    var assignedHtml = assigned.map(function (cycle) { return "<button class=\"simple-modal-job\" data-action=\"openCycleEdit\" data-id=\"".concat(cycle.order.id, "\" data-cycle-id=\"").concat(escapeHtml(cycle.cycleId), "\"><strong>").concat(escapeHtml(cyclePersonLabel(cycle)), "</strong><span>").concat(formatShortDateTime(cycle.start).slice(-5), " - ").concat(formatShortDateTime(cycle.end).slice(-5), "</span></button>"); }).join("") || "<p class=\"schedule-help\">Esta máquina está libre.</p>";
-    var html = "<div class=\"simple-machine-modal\"><h3>Trabajos en esta máquina</h3>" + assignedHtml + "</div>" +
-        "<form class=\"form-grid machine-assign-form simple-assign-form\">" +
-        "<h3 class=\"full\">Agregar trabajo</h3>" +
-        "<label class=\"full\">Pedido<select name=\"orderId\" required>" + (orderOptions || "<option value=\"\">No hay pedidos pendientes</option>") + "</select></label>" +
-        "<label>Tipo<select name=\"type\"><option " + (machineType === "Lavado" ? "selected" : "") + ">Lavado</option><option " + (machineType === "Secado" ? "selected" : "") + ">Secado</option></select></label>" +
-        "<label>Inicio<input name=\"start\" type=\"datetime-local\" required data-preview-field value=\"" + localDateTimeValue(new Date()) + "\" /></label>" +
-        "<label>Minutos<input name=\"minutes\" type=\"number\" min=\"1\" value=\"" + Number(defaultMinutes || 30) + "\" required data-preview-field /></label>" +
-        "<p class=\"full schedule-preview-note\">Vista previa: completá inicio y duración.</p><button class=\"primary full\" type=\"button\" data-action=\"saveMachineSlot\" data-machine=\"" + escapeHtml(machineName) + "\">Guardar</button>" +
-        "</form>";
-    openModal(escapeHtml(machineName), html);
+    var statusHtml = current
+        ? '<div class="machine-simple-status busy"><span>Ocupada</span><strong>' + escapeHtml(cyclePersonLabel(current)) + '</strong><small>Termina ' + formatShortDateTime(current.end).slice(-5) + '</small></div><div class="machine-simple-actions"><button class="primary" data-action="finishCycleNow" data-id="' + current.order.id + '" data-cycle-id="' + escapeHtml(current.cycleId) + '">Terminó</button><button class="secondary" data-action="shiftCycle" data-minutes="15" data-id="' + current.order.id + '" data-cycle-id="' + escapeHtml(current.cycleId) + '">+15 min</button><button class="secondary" data-action="openCycleEdit" data-id="' + current.order.id + '" data-cycle-id="' + escapeHtml(current.cycleId) + '">Cambiar</button></div>'
+        : '<div class="machine-simple-status free"><span>Libre</span><strong>' + escapeHtml(machineName) + '</strong><small>Lista para usar</small></div>';
+    var nextHtml = next && (!current || String(next.cycleId) !== String(current.cycleId)) ? '<p class="schedule-help">Sigue: ' + escapeHtml(cyclePersonLabel(next)) + ' a las ' + formatShortDateTime(next.start).slice(-5) + '.</p>' : '';
+    var assignHtml = '<details class="simple-assign-details" ' + (current ? '' : 'open') + '><summary>' + (current ? 'Agregar otro trabajo' : 'Asignar pedido ahora') + '</summary><form class="form-grid machine-assign-form simple-assign-form"><label class="full">Pedido<select name="orderId" required>' + (orderOptions || '<option value="">No hay pedidos pendientes</option>') + '</select></label><label>Minutos<input name="minutes" type="number" min="1" value="' + Number(defaultMinutes || 30) + '" required /></label><button class="primary full" type="button" data-action="saveQuickMachineSlot" data-machine="' + escapeHtml(machineName) + '" data-type="' + escapeHtml(machineType) + '">Guardar</button></form></details>';
+    openModal(escapeHtml(machineName), '<div class="simple-machine-modal">' + statusHtml + nextHtml + assignHtml + '</div>');
 }
 
 function addCycleToOrder(order, cycle) {
@@ -979,6 +976,30 @@ function saveMachineSlot(button) {
     if (conflicts.length && !confirm("Este horario choca con otro trabajo en la misma máquina. ¿Guardar igual?"))
         return;
     addCycleToOrder(order, { type: data.type || "Preparación", machine: button.getAttribute("data-machine"), start: start.toISOString(), end: end.toISOString(), minutes: minutes, manual: true });
+    saveState();
+    closeModal();
+    render();
+}
+function saveQuickMachineSlot(button) {
+    var form = button.closest("form");
+    var data = formDataToObject(form);
+    var order = getOrder(data.orderId);
+    if (!order) {
+        alert("Elegí un pedido pendiente.");
+        return;
+    }
+    var start = LaundryScheduler.normalizeBusinessStart(new Date(), state.settings);
+    var minutes = Number(data.minutes || 0);
+    if (!minutes) {
+        alert("Indicá duración en minutos.");
+        return;
+    }
+    var end = new Date(start.getTime() + minutes * 60000);
+    var machine = button.getAttribute("data-machine");
+    var conflicts = machineConflicts(machine, start, end);
+    if (conflicts.length && !confirm("Esta máquina ya tiene un trabajo en ese horario. ¿Guardarlo igual?"))
+        return;
+    addCycleToOrder(order, { type: button.getAttribute("data-type") || "Lavado", machine: machine, start: start.toISOString(), end: end.toISOString(), minutes: minutes, manual: true });
     saveState();
     closeModal();
     render();

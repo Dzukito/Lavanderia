@@ -27,7 +27,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito#1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
-- Turnos rediseñados de forma ultra simple: botón **+ Asignar pedido**, conteo de máquinas libres, tarjetas grandes de lavarropas/secadoras en verde o azul y agenda de hoy.
+- Turnos rediseñados de forma ultra simple, sin calendario separado: botón **+ Asignar pedido**, conteo de máquinas libres, tarjetas grandes de lavarropas/secadoras en verde o azul y agenda de hoy.
 - Asignación automática por disponibilidad real, con opción de tocar una máquina para guardar un trabajo o tocar un trabajo de la agenda para moverlo/borrarlo. Las herramientas menos usadas quedan plegadas en **Opciones manuales**.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
 - Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido; al hacer clic se abre la vista del pedido sin editarlo, más cartel/aviso configurable para pedidos no retirados.
@@ -55,7 +55,7 @@ La sección **Turnos** quedó reducida a lo esencial:
 2. Resumen de máquinas libres y trabajos de hoy.
 3. Tarjetas de **Lavarropas** y **Secadoras**: verde significa libre, azul ocupado y rojo reservado.
 4. **Agenda de hoy** con hora, máquina y cliente/pedido.
-5. **Opciones manuales** queda plegado para no molestar: reservar máquina, ver pedidos sin máquina, buscar libre, reordenar y calendario.
+5. **Opciones manuales** queda plegado para no molestar: reservar máquina, ver pedidos sin máquina, buscar libre y reordenar.
 
 Cuando un pedido pasa a **Listo** o **Retirado**, deja de aparecer como trabajo activo en Turnos, para que las máquinas se liberen visualmente.
 

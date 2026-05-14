@@ -44,6 +44,7 @@ for (const feature of [
   'openClientHistoryModal',
   'openOrderViewModal',
   'saveMachineSlot',
+  'saveQuickMachineSlot',
   'deleteCashEntry',
   'closeCashDay',
   'exportHistoricalCash',
@@ -123,9 +124,10 @@ assert.match(app, /class=\\"primary\\" data-action=\\"editClient\\"/, 'client ed
 assert.match(app, /data-search-clients|filterClients/, 'clients should include search');
 assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks should open read-only order view');
 assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignment');
-assert.match(app, /\+ Asignar pedido[\s\S]*schedule-machine-overview[\s\S]*scheduleDayAgendaHtml[\s\S]*schedule-calendar-panel/, 'schedule should show one main action, machines, simple agenda, then optional calendar');
-assert.match(app, /scheduleViewMode[\s\S]*Día[\s\S]*Semana[\s\S]*data-schedule-slot/, 'schedule should support day/week and slot granularity controls');
-assert.match(app, /openCycleEditModal[\s\S]*cycle-quick-actions[\s\S]*saveCycleEdit[\s\S]*deleteCycle/, 'schedule cycles should be editable, quick-adjustable and removable');
+assert.match(app, /\+ Asignar pedido[\s\S]*schedule-machine-overview[\s\S]*scheduleDayAgendaHtml[\s\S]*Opciones manuales/, 'schedule should show one main action, machines, simple agenda and folded manual options');
+assert.doesNotMatch(app, /schedule-calendar-panel|<h3>Calendario<\/h3>|simple-calendar-panel/, 'schedule should not render a separate calendar panel');
+assert.match(app, /simple-date-picker[\s\S]*data-schedule-date/, 'schedule should use a simple date picker instead of a separate calendar');
+assert.match(app, /openCycleEditModal[\s\S]*cycle-quick-actions[\s\S]*saveCycleEdit[\s\S]*deleteCycle/, 'schedule cycles should remain editable when opened from agenda');
 assert.match(app, /openMachineBlockModal[\s\S]*saveMachineBlock[\s\S]*Bloqueo/, 'schedule should support machine blocks');
 assert.match(app, /schedulePredictions[\s\S]*nextFreeMachineSlot[\s\S]*openAssignAtSuggestedSlot/, 'schedule should include actionable predictive availability');
 assert.match(app, /updateSchedulePreview[\s\S]*schedule-preview-note[\s\S]*data-preview-field/, 'schedule edit modals should include live schedule preview feedback');
@@ -165,7 +167,7 @@ assert.match(app, /activeScheduleCycles[\s\S]*order\.block \|\| order\.status ==
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note', 'friendly-schedule-hero', 'schedule-main-action', 'schedule-simple-summary', 'day-agenda', 'agenda-group', 'agenda-item', 'agenda-time', 'agenda-machine', 'schedule-advanced-actions', 'cycle-quick-actions', 'cycle-quick-button', 'machine-now', 'machine-next', 'machine-finish-time', 'machine-free-state', 'machine-working-state', 'empty-schedule-state', 'schedule-help', 'schedule-simple-hero', 'simple-schedule-summary', 'simple-machine-panel', 'simple-machine-grid', 'simple-machine-card', 'simple-day-agenda', 'simple-agenda-row', 'simple-advanced', 'simple-machine-modal', 'simple-modal-job']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note', 'friendly-schedule-hero', 'schedule-main-action', 'schedule-simple-summary', 'day-agenda', 'agenda-group', 'agenda-item', 'agenda-time', 'agenda-machine', 'schedule-advanced-actions', 'cycle-quick-actions', 'cycle-quick-button', 'machine-now', 'machine-next', 'machine-finish-time', 'machine-free-state', 'machine-working-state', 'empty-schedule-state', 'schedule-help', 'schedule-simple-hero', 'simple-schedule-summary', 'simple-machine-panel', 'simple-machine-grid', 'simple-machine-card', 'simple-day-agenda', 'simple-agenda-row', 'simple-advanced', 'simple-machine-modal', 'simple-modal-job', 'machine-simple-status', 'machine-simple-actions', 'simple-assign-details', 'simple-date-picker']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 
