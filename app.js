@@ -905,7 +905,7 @@ function schedulePlanningStart() {
     return LaundryScheduler.normalizeBusinessStart(new Date(date + "T" + time + ":00"), state.settings);
 }
 function pendingScheduleOrders() {
-    return operationalOrders().filter(function (order) { return order.status === "Pendiente" && !(order.cycles || []).length; }).sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
+    return operationalOrders().filter(function (order) { return order.status === "Pendiente"; }).sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
 }
 function estimatedOrderMinutes(order) {
     var service = getService(order.serviceId) || state.services[0];
@@ -1125,22 +1125,73 @@ function nextFreeSlotForMachine(machineName, durationMinutes, fromDate) {
     }
     return null;
 }
+function clearAutomaticCycles(order) {
+    order.cycles = (order.cycles || []).filter(function (cycle) { return cycle.manual; });
+}
+function cyclesForServiceFromType(order, firstType) {
+    var service = getService(order.serviceId) || state.services[0];
+    var cycles = [];
+    if (firstType === "Secado")
+        cycles.push({ type: "Secado", minutes: Number(state.settings.dryingMinutes || 50) });
+    else {
+        cycles.push({ type: "Lavado", minutes: Number(state.settings.washingMinutes || 30) });
+        if (service && service.dry)
+            cycles.push({ type: "Secado", minutes: Number(state.settings.dryingMinutes || 50) });
+    }
+    return cycles;
+}
+function firstAvailableMachine(type, start, minutes, preferredMachine) {
+    var machines = scheduleMachines().filter(function (machine) { return machine.type === type; });
+    if (preferredMachine)
+        machines.sort(function (a, b) { return a.name === preferredMachine ? -1 : b.name === preferredMachine ? 1 : 0; });
+    for (var index = 0; index < machines.length; index += 1) {
+        var end = LaundryScheduler.addWorkingMinutes(start, minutes, state.settings);
+        if (!machineConflicts(machines[index].name, start, end).length)
+            return { machine: machines[index].name, start: start, end: end };
+    }
+    return null;
+}
+function nextSlotAnyMachine(type, minutes, fromDate, preferredMachine) {
+    var cursor = LaundryScheduler.normalizeBusinessStart(fromDate || schedulePlanningStart(), state.settings);
+    var guard = 0;
+    while (guard < 120) {
+        var slot = firstAvailableMachine(type, cursor, minutes, preferredMachine);
+        if (slot)
+            return slot;
+        cursor = new Date(cursor.getTime() + 15 * 60000);
+        cursor = LaundryScheduler.normalizeBusinessStart(cursor, state.settings);
+        guard += 1;
+    }
+    return null;
+}
+function assignOrderSequence(order, firstType, firstMachine, startAt) {
+    clearAutomaticCycles(order);
+    var cursor = LaundryScheduler.normalizeBusinessStart(startAt || schedulePlanningStart(), state.settings);
+    var requested = cyclesForServiceFromType(order, firstType);
+    for (var index = 0; index < requested.length; index += 1) {
+        var preferred = index === 0 ? firstMachine : "";
+        var slot = nextSlotAnyMachine(requested[index].type, requested[index].minutes, cursor, preferred);
+        if (!slot)
+            return false;
+        addCycleToOrder(order, { type: requested[index].type, machine: slot.machine, start: slot.start.toISOString(), end: slot.end.toISOString(), minutes: requested[index].minutes, manual: index === 0 });
+        cursor = slot.end;
+    }
+    return true;
+}
 function assignOrderToMachineFromDrop(orderId, machineName, machineType) {
     var order = getOrder(orderId);
     if (!order || !machineName)
         return;
-    var type = machineType === "Secado" ? "Secado" : "Lavado";
-    var minutes = type === "Secado" ? Number(state.settings.dryingMinutes || 50) : Number(state.settings.washingMinutes || 30);
-    var slot = nextFreeSlotForMachine(machineName, minutes, schedulePlanningStart());
-    if (!slot) {
-        alert("No hay hueco disponible en esa máquina.");
+    var ok = assignOrderSequence(order, machineType === "Secado" ? "Secado" : "Lavado", machineName, schedulePlanningStart());
+    if (!ok) {
+        alert("No hay hueco disponible.");
         return;
     }
-    addCycleToOrder(order, { type: type, machine: machineName, start: slot.start.toISOString(), end: slot.end.toISOString(), minutes: minutes, manual: true });
     selectedScheduleTicketId = 0;
     saveState();
     renderSchedule();
 }
+
 function moveCycleToMachineName(orderId, cycleId, machineName) {
     var found = findOrderCycle(orderId, cycleId);
     if (!found || !machineName)
