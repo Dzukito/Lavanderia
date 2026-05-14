@@ -24,11 +24,11 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 ## Funciones incluidas
 
 - Clientes con nombre, teléfono, dirección, notas, botón de historial de pedidos y personas autorizadas a retirar.
-- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
+- Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito#1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
-- Turnos rediseñados con máquinas arriba, predicción de próximos huecos libres, acciones rápidas, vista día/semana, bloques de 15/30/60 minutos y calendario debajo.
-- Asignación automática de ciclos por disponibilidad real de lavarropas/secadoras, con opción de abrir una máquina para agregar, editar, mover o borrar turnos y cargar bloqueos de mantenimiento.
+- Turnos rediseñados como tablero simple: primero una acción principal **Asignar próximo pedido**, después máquinas arriba con estado Ahora/Sigue y una agenda simple del día.
+- Asignación automática de ciclos por disponibilidad real de lavarropas/secadoras, con opción de abrir una máquina para agregar, editar, mover o borrar turnos, usar acciones rápidas (+15/-15, próximo hueco, otra máquina libre, termina ahora) y cargar reservas de mantenimiento en opciones avanzadas.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
 - Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido; al hacer clic se abre la vista del pedido sin editarlo, más cartel/aviso configurable para pedidos no retirados.
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
@@ -49,12 +49,15 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 
 ### Nuevo flujo de Turnos
 
-La sección **Turnos** prioriza la operación diaria:
+La sección **Turnos** ahora está pensada como una pantalla diaria, no como una planilla técnica:
 
-1. Arriba muestra predicciones: máquinas libres/ocupadas, turnos de hoy y próximo hueco de lavado/secado.
-2. Debajo muestra primero las tarjetas de **Lavarropas** y **Secadoras**; cada máquina se puede abrir para asignar un pedido, editar/mover turnos existentes o borrarlos, con vista previa de fin y superposiciones.
-3. Las acciones rápidas permiten buscar huecos libres, crear bloqueos/mantenimiento, revisar pedidos sin turno y recalcular automáticamente la agenda activa.
-4. El calendario queda debajo de las máquinas y puede alternar entre vista **Día** y **Semana**, con granularidad de 15, 30 o 60 minutos.
+1. Arriba queda un botón grande **Asignar próximo pedido** y recomendaciones accionables para usar el próximo lavarropas/secadora libre.
+2. Después aparecen **Lavarropas** y **Secadoras** como tablero visual con tres datos simples: estado actual, qué está haciendo ahora y qué sigue.
+3. Debajo aparece una **agenda simple del día** agrupada en Ahora, Próximos trabajos y Más temprano.
+4. Las herramientas más complejas quedan en **Opciones avanzadas**: calendario día/semana, duración de vista, encontrar máquina libre, reservar máquina, pedidos por ubicar y reordenar agenda.
+5. Al editar un turno hay botones rápidos para mover 15 minutos, pasar al próximo hueco, cambiar a otra máquina libre, marcar que terminó ahora o borrar el turno.
+
+Cuando un pedido pasa a **Listo** o **Retirado**, deja de aparecer como trabajo activo en Turnos, para que las máquinas se liberen visualmente.
 
 ### Importar CSV desde Configuración
 
