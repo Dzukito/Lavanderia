@@ -27,8 +27,8 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito#1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
-- Turnos rediseñados de forma ultra simple, sin calendario separado: botón **+ Asignar pedido**, conteo de máquinas libres, tarjetas grandes de lavarropas/secadoras en verde o azul y agenda de hoy.
-- Asignación automática por disponibilidad real, con opción de tocar una máquina para guardar un trabajo o tocar un trabajo de la agenda para moverlo/borrarlo. Las herramientas menos usadas quedan plegadas en **Opciones manuales**.
+- Turnos rediseñados como tablero: máquinas al centro, tickets pendientes a la derecha para arrastrar, agenda diaria integrada y botón **Calcular turnos** desde una fecha/hora elegida.
+- Asignación manual por arrastrar y soltar tickets a lavarropas/secadoras; también permite mover turnos dentro de la agenda diaria y consultar detalle con **Ver**.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
 - Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido; al hacer clic se abre la vista del pedido sin editarlo, más cartel/aviso configurable para pedidos no retirados.
 - Avisos al cliente por WhatsApp Web desde un único menú: recibimos tu pedido, tu pedido está listo y retiró su pedido; el texto cambia automáticamente si está pago o pendiente.
@@ -51,11 +51,11 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 
 La sección **Turnos** quedó reducida a lo esencial:
 
-1. Botón grande **+ Asignar pedido**.
-2. Resumen de máquinas libres y trabajos de hoy.
-3. Tarjetas de **Lavarropas** y **Secadoras**: verde significa libre, azul ocupado y rojo reservado.
-4. **Agenda de hoy** con hora, máquina y cliente/pedido.
-5. **Opciones manuales** queda plegado para no molestar: reservar máquina, ver pedidos sin máquina, buscar libre y reordenar.
+1. A la derecha están los **tickets pendientes** en versión reducida.
+2. Se puede arrastrar un ticket a un lavarropas o secadora para asignarlo.
+3. El turno aparece en la **agenda diaria** según la duración del ciclo.
+4. Se puede mover un turno arrastrándolo a otra hora de la agenda.
+5. **Calcular turnos** asigna automáticamente desde la fecha y hora elegida, sin depender de la hora de la PC.
 
 Cuando un pedido pasa a **Listo** o **Retirado**, deja de aparecer como trabajo activo en Turnos, para que las máquinas se liberen visualmente.
 

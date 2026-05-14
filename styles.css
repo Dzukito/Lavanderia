@@ -466,3 +466,41 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
   .machine-simple-actions { grid-template-columns: 1fr; }
   .simple-date-picker { align-items: stretch; flex-direction: column; }
 }
+
+/* Turnos con tickets pendientes */
+.schedule-workspace { align-items: start; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 280px; }
+.schedule-main-board { display: grid; gap: 16px; }
+.plan-controls { align-items: end; display: grid; gap: 10px; grid-template-columns: 150px 120px auto; }
+.plan-controls label { color: var(--muted); font-weight: 900; }
+.pending-ticket-column { background: #fff; border: 2px solid var(--line); border-radius: 24px; box-shadow: 0 10px 26px rgba(24,34,48,.07); display: grid; gap: 10px; max-height: calc(100vh - 130px); overflow: auto; padding: 14px; position: sticky; top: 18px; }
+.pending-ticket-header { align-items: center; display: flex; justify-content: space-between; }
+.pending-ticket-header h3 { margin: 0; }
+.pending-ticket-header strong { background: #fff4e6; border-radius: 999px; color: #d9480f; padding: 6px 12px; }
+.pending-ticket { align-items: center; background: #fbfdff; border: 2px solid var(--line); border-radius: 18px; cursor: grab; display: grid; gap: 8px; grid-template-columns: 1fr auto; padding: 10px; }
+.pending-ticket-main { background: transparent; border: 0; color: inherit; cursor: pointer; display: grid; font: inherit; gap: 2px; padding: 0; text-align: left; }
+.pending-ticket-code { color: var(--primary-dark); font-size: 18px; }
+.pending-ticket-client { color: var(--ink); font-weight: 1000; }
+.pending-ticket-meta { color: var(--muted); font-weight: 800; }
+.detail-dot { background: #eef6ff; border: 0; border-radius: 999px; color: var(--primary-dark); cursor: pointer; font-weight: 1000; padding: 8px 10px; }
+.selected-ticket { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(47,111,237,.12); }
+.pending-ticket.dragging { opacity: .55; }
+.simple-machine-card.drop-hover { box-shadow: 0 0 0 5px rgba(47,111,237,.2); transform: translateY(-2px); }
+.daily-slot-list { display: grid; gap: 8px; }
+.daily-slot { align-items: start; background: #fff; border: 2px solid var(--line); border-radius: 16px; display: grid; gap: 10px; grid-template-columns: 72px 1fr; min-height: 58px; padding: 10px; }
+.daily-slot > strong { color: var(--primary-dark); font-size: 18px; padding-top: 8px; }
+.daily-slot > div { display: grid; gap: 8px; }
+.daily-slot:hover { border-color: #bfdbfe; }
+.compact-cycle { align-items: center; background: #e7f5ff; border: 0; border-radius: 14px; color: #1864ab; cursor: grab; display: grid; font: inherit; gap: 8px; grid-template-columns: 58px 120px 1fr; padding: 9px 10px; text-align: left; }
+.compact-cycle strong, .compact-cycle span { font-weight: 1000; }
+.compact-cycle em { color: var(--ink); font-style: normal; font-weight: 900; }
+.slot-empty { color: #adb5bd; display: block; font-weight: 900; padding: 8px 0; }
+.empty-mini { color: var(--muted); font-weight: 900; margin: 0; }
+
+@media (max-width: 1100px) {
+  .schedule-workspace { grid-template-columns: 1fr; }
+  .pending-ticket-column { max-height: none; position: static; }
+}
+@media (max-width: 720px) {
+  .plan-controls, .daily-slot, .compact-cycle { grid-template-columns: 1fr; }
+}
+.compact-ticket { min-height: 88px; }
