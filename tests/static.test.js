@@ -73,6 +73,7 @@ for (const feature of [
   'scheduleVisibleDays',
   'schedulePredictions',
   'activeScheduleCycles',
+  'calendarScheduleCycles',
   'scheduleMachines',
   'pendingScheduleTicketsHtml',
   'pendingScheduleOrders',
@@ -84,6 +85,7 @@ for (const feature of [
   'moveCycleToMachineName',
   'schedulePlanningStart',
   'calculateScheduleFromSelectedTime',
+  'assignOrderToCalendarTime',
   'updateSchedulePreview',
   'currentCycleForMachine',
   'nextCycleForMachine',
@@ -136,10 +138,12 @@ assert.match(app, /openStorageOrder[\s\S]*openOrderViewModal/, 'storage clicks s
 assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignment');
 assert.match(app, /schedule-workspace/, 'schedule should use a workspace layout');
 assert.match(app, /pendingScheduleTicketsHtml/, 'schedule should include right pending ticket column');
-assert.match(app, /data-drop-machine[\s\S]*assignOrderToMachineFromDrop/, 'schedule should support dropping tickets on machines');
+assert.match(app, /data-drop-time[\s\S]*assignOrderToCalendarTime/, 'schedule should support dropping tickets on daily time slots');
+assert.doesNotMatch(app, /data-drop-machine/, 'machines should be view-only, not drop targets');
 assert.match(app, /data-drop-time[\s\S]*moveCycleToTime/, 'schedule should support moving cycles to daily time slots');
 assert.doesNotMatch(app, /schedule-calendar-panel|<h3>Calendario<\/h3>|simple-calendar-panel/, 'schedule should not render a separate calendar panel');
-assert.match(app, /data-plan-date[\s\S]*data-plan-time[\s\S]*calculateScheduleFromSelectedTime/, 'automatic scheduling should use chosen date and time');
+assert.doesNotMatch(app, /data-plan-date|data-plan-time|Calcular turnos/, 'schedule should not show top date/time calculate controls');
+assert.match(app, /createOrderSchedule[\s\S]*cycles: \[\]/, 'new orders should not auto-fill schedule before being dragged');
 assert.match(app, /openCycleEditModal[\s\S]*cycle-quick-actions[\s\S]*saveCycleEdit[\s\S]*deleteCycle/, 'schedule cycles should remain editable when opened from agenda');
 assert.match(app, /openMachineBlockModal[\s\S]*saveMachineBlock[\s\S]*Bloqueo/, 'schedule should support machine blocks');
 assert.match(app, /schedulePredictions[\s\S]*nextFreeMachineSlot[\s\S]*openAssignAtSuggestedSlot/, 'schedule should include actionable predictive availability');
@@ -176,11 +180,12 @@ assert.match(app, /whatsappReceivedMessage/, 'WhatsApp should include received n
 assert.match(app, /Total: \{total\}/, 'WhatsApp templates should include order total for customers');
 assert.match(app, /messageForOrder[\s\S]*customerOrderCode\(order\)/, 'WhatsApp messages should send the simple customer order id instead of the storage code');
 assert.match(app, /if \(view === "cash" \|\| view === "cashReports"\)[\s\S]{0,80}cashUnlocked = false/, 'cash and metrics views should request PIN every time');
-assert.match(app, /activeScheduleCycles[\s\S]*order\.block \|\| order\.status === "Pendiente"/, 'turns should only show pending orders as active machine work');
+assert.match(app, /activeScheduleCycles[\s\S]*order\.block \|\| order\.status === "Pendiente"/, 'machines should only show pending orders as active machine work');
+assert.match(app, /calendarScheduleCycles[\s\S]*order\.block \|\| \(order\.cycles \|\| \[\]\)\.length/, 'calendar should keep scheduled cycles even after status changes');
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note', 'friendly-schedule-hero', 'schedule-main-action', 'schedule-simple-summary', 'day-agenda', 'agenda-group', 'agenda-item', 'agenda-time', 'agenda-machine', 'schedule-advanced-actions', 'cycle-quick-actions', 'cycle-quick-button', 'machine-now', 'machine-next', 'machine-finish-time', 'machine-free-state', 'machine-working-state', 'empty-schedule-state', 'schedule-help', 'schedule-simple-hero', 'simple-schedule-summary', 'simple-machine-panel', 'simple-machine-grid', 'simple-machine-card', 'simple-day-agenda', 'simple-agenda-row', 'simple-advanced', 'simple-machine-modal', 'simple-modal-job', 'machine-simple-status', 'machine-simple-actions', 'simple-assign-details', 'simple-date-picker', 'schedule-workspace', 'pending-ticket-column', 'pending-ticket', 'pending-ticket-code', 'pending-ticket-client', 'pending-ticket-meta', 'compact-ticket', 'compact-cycle', 'detail-dot', 'daily-slot-list', 'daily-slot', 'slot-empty', 'plan-controls', 'selected-ticket']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note', 'friendly-schedule-hero', 'schedule-main-action', 'schedule-simple-summary', 'day-agenda', 'agenda-group', 'agenda-item', 'agenda-time', 'agenda-machine', 'schedule-advanced-actions', 'cycle-quick-actions', 'cycle-quick-button', 'machine-now', 'machine-next', 'machine-finish-time', 'machine-free-state', 'machine-working-state', 'empty-schedule-state', 'schedule-help', 'schedule-simple-hero', 'simple-schedule-summary', 'simple-machine-panel', 'simple-machine-grid', 'simple-machine-card', 'simple-day-agenda', 'simple-agenda-row', 'simple-advanced', 'simple-machine-modal', 'simple-modal-job', 'machine-simple-status', 'machine-simple-actions', 'simple-assign-details', 'simple-date-picker', 'schedule-workspace', 'pending-ticket-column', 'pending-ticket', 'pending-ticket-code', 'pending-ticket-client', 'pending-ticket-meta', 'compact-ticket', 'compact-cycle', 'detail-dot', 'daily-slot-list', 'daily-slot', 'slot-empty', 'selected-ticket']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 

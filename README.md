@@ -27,7 +27,7 @@ Los datos se guardan en el `localStorage` del navegador que se usa. Chrome, Fire
 - Pedidos con código visible compuesto por depósito + id interno, por ejemplo `A2#1001`; si está retirado usa formato `R#1001`, y si no tiene depósito pero sigue activo muestra `Sin depósito#1001`, prendas/trabajos manuales con cantidad, estado simple, horario estimado, total calculado, pago, medio de pago y observaciones visibles.
 - Servicios iniciales: valet, lavado, secado, lavado + secado y otro.
 - Estados simplificados del pedido: pendiente, listo y retirado.
-- Turnos rediseñados como tablero: máquinas al centro, tickets pendientes a la derecha para arrastrar, agenda diaria integrada y asignación automática al arrastrar desde una fecha/hora elegida.
+- Turnos rediseñados como tablero: máquinas al centro, tickets pendientes a la derecha para arrastrar y agenda diaria integrada por horarios.
 - Asignación manual por arrastrar y soltar tickets a lavarropas/secadoras; también permite mover turnos dentro de la agenda diaria y consultar detalle con **Ver**.
 - Capacidad configurable: lavarropas chicos, secadoras, duración de lavado y duración de secado.
 - Depósito visual con ubicaciones tipo A1, A2, A3 para encontrar paquetes rápido; al hacer clic se abre la vista del pedido sin editarlo, más cartel/aviso configurable para pedidos no retirados.
@@ -55,7 +55,7 @@ La sección **Turnos** quedó reducida a lo esencial:
 2. Se puede arrastrar un ticket a un lavarropas o secadora para asignarlo.
 3. Al soltarlo, se completa la agenda hacia abajo según el servicio: lavado y, si corresponde, secado.
 4. Se puede mover un turno arrastrándolo a otra hora de la agenda.
-5. El horario de inicio lo marca la fecha/hora elegida en Turnos, sin depender de la hora de la PC.
+5. El horario de inicio lo marca el bloque horario donde se suelta el ticket, sin depender de la hora de la PC.
 
 Cuando un pedido pasa a **Listo** o **Retirado**, deja de aparecer como trabajo activo en Turnos, para que las máquinas se liberen visualmente.
 

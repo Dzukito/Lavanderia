@@ -167,8 +167,6 @@ var cashUnlocked = false;
 var selectedMachine = null;
 var scheduleWeekStart = currentWeekStart(new Date()).toISOString().slice(0, 10);
 var scheduleSelectedDate = localDateInput();
-var schedulePlanDate = localDateInput();
-var schedulePlanTime = "09:00";
 var selectedScheduleTicketId = 0;
 var draggedScheduleTicketId = 0;
 var draggedScheduleCycle = null;
@@ -292,7 +290,7 @@ function availableLocations(currentOrderId) {
     return state.locations.filter(function (location) { return !busy[location.code]; });
 }
 function createOrderSchedule(service, createdAt) {
-    return LaundryScheduler.scheduleOrder(state.orders, service, state.settings, createdAt);
+    return { estimate: createdAt || new Date().toISOString(), cycles: [] };
 }
 function nextCycleId(orderId, index) {
     return "c" + String(orderId || "nuevo") + "-" + String(index || 0) + "-" + String(new Date().getTime());
@@ -595,18 +593,6 @@ document.addEventListener("change", function (event) {
     }
     if (event.target.matches("[data-schedule-week], [data-schedule-date]")) {
         setScheduleDate(event.target.value);
-        schedulePlanDate = event.target.value || schedulePlanDate;
-        return;
-    }
-    if (event.target.matches("[data-plan-date]")) {
-        schedulePlanDate = event.target.value || schedulePlanDate;
-        scheduleSelectedDate = schedulePlanDate;
-        renderSchedule();
-        return;
-    }
-    if (event.target.matches("[data-plan-time]")) {
-        schedulePlanTime = event.target.value || schedulePlanTime;
-        renderSchedule();
         return;
     }
     if (event.target.matches("[data-schedule-slot]")) {
@@ -651,31 +637,20 @@ document.addEventListener("dragend", function () {
     });
 });
 document.addEventListener("dragover", function (event) {
-    var dropMachine = event.target.closest("[data-drop-machine]");
     var dropTime = event.target.closest("[data-drop-time]");
-    if (dropMachine || dropTime) {
+    if (dropTime)
         event.preventDefault();
-        if (dropMachine && dropMachine.className.indexOf("drop-hover") === -1)
-            dropMachine.className += " drop-hover";
-    }
 });
 document.addEventListener("drop", function (event) {
-    var dropMachine = event.target.closest("[data-drop-machine]");
     var dropTime = event.target.closest("[data-drop-time]");
     var data = event.dataTransfer ? event.dataTransfer.getData("text/plain") : "";
-    if (dropMachine) {
-        event.preventDefault();
-        if (draggedScheduleCycle) {
-            moveCycleToMachineName(draggedScheduleCycle.orderId, draggedScheduleCycle.cycleId, dropMachine.getAttribute("data-machine"));
-            return;
-        }
-        assignOrderToMachineFromDrop(draggedScheduleTicketId || Number(String(data).replace("ticket:", "")), dropMachine.getAttribute("data-machine"), dropMachine.getAttribute("data-machine-type"));
-        return;
-    }
     if (dropTime) {
         event.preventDefault();
-        if (draggedScheduleCycle)
+        if (draggedScheduleCycle) {
             moveCycleToTime(draggedScheduleCycle.orderId, draggedScheduleCycle.cycleId, dropTime.getAttribute("data-slot-start"));
+            return;
+        }
+        assignOrderToCalendarTime(draggedScheduleTicketId || Number(String(data).replace("ticket:", "")), dropTime.getAttribute("data-slot-start"));
     }
 });
 function fourDigitId(id) {
@@ -805,6 +780,14 @@ function activeScheduleCycles() {
         .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
     return cycles;
 }
+function calendarScheduleCycles() {
+    var cycles = state.orders
+        .filter(function (order) { return order.block || (order.cycles || []).length; })
+        .reduce(function (list, order) { return list.concat((order.cycles || []).map(function (cycle, index) { return (__assign(__assign({}, cycle), { order: order, cycleIndex: index, cycleId: cycle.cycleId || String(order.id) + "-" + String(index) })); })); }, [])
+        .filter(function (cycle) { return cycle.type !== "Preparación"; })
+        .sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
+    return cycles;
+}
 function scheduleVisibleDays() {
     if (scheduleViewMode === "week")
         return currentWeekDays(new Date("".concat(scheduleWeekStart, "T00:00:00")));
@@ -900,8 +883,8 @@ function cyclePersonLabel(cycle) {
     return orderClient(cycle.order) + " · " + orderDisplayCode(cycle.order);
 }
 function schedulePlanningStart() {
-    var date = schedulePlanDate || scheduleSelectedDate || localDateInput();
-    var time = schedulePlanTime || state.settings.openHour || "09:00";
+    var date = scheduleSelectedDate || localDateInput();
+    var time = state.settings.openHour || "09:00";
     return LaundryScheduler.normalizeBusinessStart(new Date(date + "T" + time + ":00"), state.settings);
 }
 function pendingScheduleOrders() {
@@ -969,20 +952,21 @@ function toggleScheduleAdvancedMode() {
 function renderSchedule() {
     var machines = scheduleMachines();
     var activeCycles = activeScheduleCycles();
+    var calendarCycles = calendarScheduleCycles();
     var prediction = schedulePredictions(activeCycles, machines, [new Date(scheduleSelectedDate + "T00:00:00")]);
     var html = "";
     html += "<div class=\"schedule-workspace\"><main class=\"schedule-main-board\">";
-    html += "<div class=\"card schedule-simple-hero\"><div><p class=\"eyebrow-dark\">Turnos</p><h2>Máquinas de hoy</h2></div><div class=\"plan-controls\"><label>Desde <input type=\"date\" data-plan-date value=\"" + escapeHtml(schedulePlanDate) + "\" /></label><label>Hora <input type=\"time\" data-plan-time value=\"" + escapeHtml(schedulePlanTime) + "\" /></label><button class=\"primary\" data-action=\"calculateScheduleFromSelectedTime\">Calcular turnos</button></div></div>";
+    html += "<div class=\"card schedule-simple-hero\"><div><p class=\"eyebrow-dark\">Turnos</p><h2>Máquinas de hoy</h2></div></div>";
     html += schedulePrimarySummary(prediction);
     html += "<div class=\"card schedule-machine-overview simple-machine-panel\"><div class=\"simple-section-title\"><h3>Lavarropas</h3></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles) + "<div class=\"simple-section-title\"><h3>Secadoras</h3></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles) + "</div>";
-    html += scheduleDayAgendaHtml(activeCycles, new Date(scheduleSelectedDate + "T00:00:00"));
+    html += scheduleDayAgendaHtml(calendarCycles, new Date(scheduleSelectedDate + "T00:00:00"));
     html += "<details class=\"card schedule-advanced-actions simple-advanced\"><summary><strong>Opciones manuales</strong></summary><div class=\"schedule-quick-actions simple-manual-actions\"><button class=\"secondary\" data-action=\"openMachineBlockModal\">Reservar máquina</button><button class=\"secondary\" data-action=\"openUnscheduledOrdersModal\">Pedidos sin máquina</button><button class=\"secondary\" data-action=\"openFreeSlotFinder\">Buscar libre</button></div></details>";
     html += "</main>" + pendingScheduleTicketsHtml() + "</div>";
     document.getElementById("schedule").innerHTML = html;
 }
-function scheduleDayAgendaHtml(activeCycles, selectedDate) {
+function scheduleDayAgendaHtml(calendarCycles, selectedDate) {
     var key = dateKey(selectedDate);
-    var dayCycles = activeCycles.filter(function (cycle) { return dateKey(cycle.start) === key; });
+    var dayCycles = calendarCycles.filter(function (cycle) { return dateKey(cycle.start) === key; });
     var slots = dailyScheduleSlots(selectedDate, 30);
     var rows = slots.map(function (slot) {
         var slotEnd = new Date(slot.start.getTime() + 30 * 60000);
@@ -1016,7 +1000,7 @@ function machineBoard(machines, activeCycles) {
         var current = currentCycleForMachine(machine.name, activeCycles);
         var status = machineStatusLabel(machine, current);
         var stateClass = current ? current.type === "Bloqueo" ? "reserved" : "working" : "free";
-        return "<button class=\"machine machine-click simple-machine-card ".concat(stateClass, " type-").concat(normalizeClass(machine.type), "\" data-action=\"assignSelectedTicketToMachine\" data-drop-machine data-machine=\"").concat(escapeHtml(machine.name), "\" data-machine-type=\"").concat(escapeHtml(machine.type), "\"><strong>").concat(escapeHtml(machine.name), "</strong><span>").concat(escapeHtml(status), "</span><small>").concat(escapeHtml(current ? cyclePersonLabel(current) : "Libre"), "</small>").concat(current ? "<em>Hasta " + formatShortDateTime(current.end).slice(-5) + "</em>" : "", "</button>");
+        return "<article class=\"machine simple-machine-card ".concat(stateClass, " type-").concat(normalizeClass(machine.type), "\"><strong>").concat(escapeHtml(machine.name), "</strong><span>").concat(escapeHtml(status), "</span><small>").concat(escapeHtml(current ? cyclePersonLabel(current) : "Libre"), "</small>").concat(current ? "<em>Hasta " + formatShortDateTime(current.end).slice(-5) + "</em>" : "", "</article>");
     }).join(""), "</div>");
 }
 
@@ -1126,7 +1110,7 @@ function nextFreeSlotForMachine(machineName, durationMinutes, fromDate) {
     return null;
 }
 function clearAutomaticCycles(order) {
-    order.cycles = (order.cycles || []).filter(function (cycle) { return cycle.manual; });
+    order.cycles = [];
 }
 function cyclesForServiceFromType(order, firstType) {
     var service = getService(order.serviceId) || state.services[0];
@@ -1177,6 +1161,22 @@ function assignOrderSequence(order, firstType, firstMachine, startAt) {
         cursor = slot.end;
     }
     return true;
+}
+function assignOrderToCalendarTime(orderId, slotStart) {
+    var order = getOrder(orderId);
+    var start = new Date(slotStart);
+    if (!order || isNaN(start.getTime()))
+        return;
+    var service = getService(order.serviceId) || state.services[0];
+    var firstType = service && service.dry && !(service && service.wash) ? "Secado" : "Lavado";
+    var ok = assignOrderSequence(order, firstType, "", start);
+    if (!ok) {
+        alert("No hay hueco disponible.");
+        return;
+    }
+    selectedScheduleTicketId = 0;
+    saveState();
+    renderSchedule();
 }
 function assignOrderToMachineFromDrop(orderId, machineName, machineType) {
     var order = getOrder(orderId);
