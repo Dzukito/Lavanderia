@@ -175,6 +175,8 @@ var scheduleSlotMinutes = 30;
 var scheduleSimpleMode = true;
 var schedulePreview = null;
 var selectedMetricsMonth = "";
+var selectedMetricsYear = "";
+var selectedMetricsCompareMonth = "";
 function mergeLocations(defaultLocations, savedLocations) {
     if (savedLocations === void 0) { savedLocations = []; }
     var result = [];
@@ -435,36 +437,58 @@ function monthlyCashHtml(month) {
     var rows = historicalCashRows().filter(function (entry) { return monthKey(entry.date) === month; });
     return '<details class="monthly-cash-panel"><summary class="secondary history-toggle">Ver caja mensual</summary><div class="toolbar compact-toolbar"><h3>Caja mensual ' + escapeHtml(month || "sin mes") + '</h3><button class="secondary" data-action="exportMonthlyCash" data-month="' + escapeHtml(month || "") + '">Exportar caja mensual CSV</button></div><div class="table-wrap"><table class="cash-history-table"><thead><tr><th>Cierre</th><th>Movimiento</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Medio</th><th>Importe</th></tr></thead><tbody>'.concat(rows.map(function (entry) { return '<tr class="'.concat(entry.type === "Ingreso" ? "cash-income-row" : "cash-expense-row", '"><td>').concat(formatDateTime(entry.closedAt), '</td><td>').concat(formatDateTime(entry.date), '</td><td>').concat(escapeHtml(entry.type), '</td><td>').concat(escapeHtml(entry.category), '</td><td>').concat(escapeHtml(entry.description), '</td><td>').concat(paymentMethodLabel(entry.method), '</td><td class="').concat(signedCashAmount(entry) < 0 ? 'negative-amount' : '', '">').concat(moneySigned(signedCashAmount(entry)), '</td></tr>'); }).join('') || '<tr><td colspan="7">No hay caja archivada para este mes.</td></tr>', '</tbody></table></div></details>');
 }
-function orderHourLineChart(row) {
-    var counts = row.hourlyCounts || emptyHourlyCounts();
-    var max = counts.reduce(function (best, item) { return Math.max(best, item.count); }, 1);
-    var chartTop = 24;
-    var chartBottom = 150;
-    var chartLeft = 48;
-    var chartRight = 584;
-    var points = counts.map(function (item, index) {
-        var x = chartLeft + index * ((chartRight - chartLeft) / 23);
-        var y = chartBottom - (item.count / max) * (chartBottom - chartTop);
-        return Math.round(x) + "," + Math.round(y);
-    }).join(" ");
+function metricYearOptions(rows) {
+    var years = {};
+    rows.forEach(function (row) { years[row.month.slice(0, 4)] = true; });
+    var list = [];
+    for (var year in years) { if (Object.prototype.hasOwnProperty.call(years, year)) list.push(year); }
+    list.sort();
+    return list;
+}
+function metricsControlsHtml(rows, selectedMonth, selectedYear, compareMonth) {
+    var years = metricYearOptions(rows);
+    var yearValue = selectedYear || (selectedMonth ? selectedMonth.slice(0, 4) : (years[years.length - 1] || ""));
+    var monthOptions = rows.map(function (row) { return '<option value="'.concat(escapeHtml(row.month), '" ').concat(row.month === selectedMonth ? 'selected' : '', '>').concat(escapeHtml(row.month), '</option>'); }).join('');
+    var compareOptions = '<option value="">Sin comparación</option>' + rows.map(function (row) { return '<option value="'.concat(escapeHtml(row.month), '" ').concat(row.month === compareMonth ? 'selected' : '', '>').concat(escapeHtml(row.month), '</option>'); }).join('');
+    var yearOptions = '<option value="all" ' + (yearValue === "all" ? 'selected' : '') + '>Todos los años</option>' + years.map(function (year) { return '<option value="'.concat(escapeHtml(year), '" ').concat(year === yearValue ? 'selected' : '', '>').concat(escapeHtml(year), '</option>'); }).join('');
+    return '<div class="metrics-controls"><label>Año<select data-metrics-year>'.concat(yearOptions, '</select></label><label>Mes principal<select data-metrics-month>').concat(monthOptions, '</select></label><label>Comparar con<select data-metrics-compare>').concat(compareOptions, '</select></label></div>');
+}
+function monthlyPerformanceLineChart(rows, selectedMonth, compareMonth, selectedYear) {
+    var chartRows = rows.filter(function (row) { return selectedYear === "all" || !selectedYear || row.month.slice(0, 4) === selectedYear; });
+    if (!chartRows.length)
+        chartRows = rows;
+    if (!chartRows.length)
+        chartRows = [{ month: "Sin datos", balance: 0, income: 0, expense: 0 }];
+    var values = chartRows.map(function (row) { return Number(row.balance || 0); });
+    var max = Math.max.apply(Math, values.concat([0]));
+    var min = Math.min.apply(Math, values.concat([0]));
+    if (max === min) { max += 1; min -= 1; }
+    var chartTop = 30;
+    var chartBottom = 250;
+    var chartLeft = 76;
+    var chartRight = 760;
+    var span = max - min;
+    var xFor = function (index) { return chartRows.length === 1 ? chartLeft : chartLeft + index * ((chartRight - chartLeft) / (chartRows.length - 1)); };
+    var yFor = function (value) { return chartBottom - ((Number(value || 0) - min) / span) * (chartBottom - chartTop); };
+    var points = chartRows.map(function (row, index) { return Math.round(xFor(index)) + "," + Math.round(yFor(row.balance)); }).join(" ");
     var yTicks = [];
     for (var tick = 0; tick <= 4; tick += 1) {
-        var value = Math.round((max / 4) * tick);
-        var y = chartBottom - (value / max) * (chartBottom - chartTop);
-        yTicks.push({ value: value, y: Math.round(y) });
+        var value = min + (span / 4) * tick;
+        yTicks.push({ value: value, y: Math.round(yFor(value)) });
     }
-    var yLines = yTicks.map(function (tick) { return '<g><line class="grid-line" x1="'.concat(chartLeft, '" y1="').concat(tick.y, '" x2="').concat(chartRight, '" y2="').concat(tick.y, '"></line><text x="8" y="').concat(tick.y + 4, '">').concat(tick.value, '</text></g>'); }).join("");
-    var dots = counts.map(function (item, index) {
-        var x = chartLeft + index * ((chartRight - chartLeft) / 23);
-        var y = chartBottom - (item.count / max) * (chartBottom - chartTop);
-        return '<circle cx="'.concat(Math.round(x), '" cy="').concat(Math.round(y), '" r="').concat(item.count ? 4 : 2, '"><title>').concat(escapeHtml(item.label), ': ').concat(item.count, ' pedidos</title></circle>');
+    var yLines = yTicks.map(function (tick) { return '<g><line class="grid-line" x1="'.concat(chartLeft, '" y1="').concat(tick.y, '" x2="').concat(chartRight, '" y2="').concat(tick.y, '"></line><text x="6" y="').concat(tick.y + 4, '">').concat(escapeHtml(money(tick.value)), '</text></g>'); }).join("");
+    var dots = chartRows.map(function (row, index) {
+        var selected = row.month === selectedMonth ? ' selected-point' : row.month === compareMonth ? ' compare-point' : '';
+        return '<circle class="performance-point'.concat(selected, '" cx="').concat(Math.round(xFor(index)), '" cy="').concat(Math.round(yFor(row.balance)), '" r="').concat(row.month === selectedMonth || row.month === compareMonth ? 7 : 4, '"><title>').concat(escapeHtml(row.month), ': saldo ').concat(escapeHtml(money(row.balance)), ', ingresos ').concat(escapeHtml(money(row.income)), ', egresos ').concat(escapeHtml(money(row.expense)), '</title></circle>');
     }).join("");
-    var labels = counts.filter(function (item) { return item.count > 0; }).map(function (item) { return '<span><strong>'.concat(escapeHtml(item.label), '</strong>').concat(item.count, '</span>'); }).join('') || '<span>Sin pedidos en este mes.</span>';
-    var xLabels = counts.map(function (item) { return "<span>" + escapeHtml(item.label) + "</span>"; }).join("");
-    return '<div class="hour-line-chart"><div class="hour-chart-wrap"><span class="y-axis-title">Pedidos</span><svg viewBox="0 0 600 180" role="img" aria-label="Pedidos por hora"><g class="y-axis-labels">'.concat(yLines, '</g><line class="axis-line" x1="').concat(chartLeft, '" y1="').concat(chartBottom, '" x2="').concat(chartRight, '" y2="').concat(chartBottom, '"></line><line class="axis-line" x1="').concat(chartLeft, '" y1="').concat(chartTop, '" x2="').concat(chartLeft, '" y2="').concat(chartBottom, '"></line><polyline points="').concat(points, '"></polyline><g class="hour-points">').concat(dots, '</g></svg></div><div class="hour-axis-labels">').concat(xLabels, '</div><div class="hour-chart-labels">').concat(labels, '</div></div>');
+    var xLabels = chartRows.map(function (row, index) { return '<span style="left:'.concat(Math.round((xFor(index) - chartLeft) / (chartRight - chartLeft) * 100), '%">').concat(escapeHtml(row.month.slice(5, 7) + '/' + row.month.slice(2, 4)), '</span>'); }).join("");
+    var selected = rows.find(function (row) { return row.month === selectedMonth; });
+    var compare = rows.find(function (row) { return row.month === compareMonth; });
+    var comparison = compare && selected ? '<div class="comparison-chip"><strong>Comparación</strong><span>'.concat(escapeHtml(selected.month), ': ').concat(money(selected.balance), '</span><span>').concat(escapeHtml(compare.month), ': ').concat(money(compare.balance), '</span><em>Diferencia: ').concat(money(selected.balance - compare.balance), '</em></div>') : '<div class="comparison-chip muted-chip">Elegí otro mes para comparar el resultado.</div>';
+    return '<article class="performance-line-card"><div class="metric-month-head"><div><h3>Evolución mensual del resultado</h3><p>El eje X muestra los meses y el eje Y muestra el saldo neto de caja (ingresos menos egresos).</p></div>'.concat(comparison, '</div><div class="performance-chart-wrap"><span class="y-axis-title">Saldo neto ($)</span><svg viewBox="0 0 800 300" role="img" aria-label="Evolución mensual del resultado"><g class="y-axis-labels">').concat(yLines, '</g><line class="axis-line" x1="').concat(chartLeft, '" y1="').concat(chartBottom, '" x2="').concat(chartRight, '" y2="').concat(chartBottom, '"></line><line class="axis-line" x1="').concat(chartLeft, '" y1="').concat(chartTop, '" x2="').concat(chartLeft, '" y2="').concat(chartBottom, '"></line><polyline points="').concat(points, '"></polyline><g class="performance-points">').concat(dots, '</g></svg><div class="performance-axis-labels">').concat(xLabels, '</div><div class="x-axis-title">Meses del año</div></div></article>');
 }
 function monthSelectorHtml(rows, selectedMonth) {
-    return '<label>Ver mes<select data-metrics-month>'.concat(rows.map(function (row) { return '<option value="'.concat(escapeHtml(row.month), '" ').concat(row.month === selectedMonth ? 'selected' : '', '>').concat(escapeHtml(row.month), '</option>'); }).join(''), '</select></label>');
+    return metricsControlsHtml(rows, selectedMonth, selectedMetricsYear, selectedMetricsCompareMonth);
 }
 function messageForOrder(order, type) {
     var templates = {
@@ -560,8 +584,6 @@ document.addEventListener("click", function (event) {
         calculateScheduleFromSelectedTime: calculateScheduleFromSelectedTime,
         cashIncome: function () { return openCashModal("Ingreso"); },
         cashExpense: function () { return openCashModal("Egreso"); },
-        openDeleteCashModal: openDeleteCashModal,
-        deleteCashEntry: function () { return deleteCashEntry(id); },
         closeCashDay: closeCashDay,
         exportHistoricalCash: exportHistoricalCash,
         exportMonthlyCash: function () { return exportMonthlyCash(target.getAttribute("data-month")); },
@@ -588,6 +610,16 @@ document.addEventListener("input", function (event) {
 document.addEventListener("change", function (event) {
     if (event.target.matches("[data-metrics-month]")) {
         selectedMetricsMonth = event.target.value;
+        renderCashReports();
+        return;
+    }
+    if (event.target.matches("[data-metrics-year]")) {
+        selectedMetricsYear = event.target.value;
+        renderCashReports();
+        return;
+    }
+    if (event.target.matches("[data-metrics-compare]")) {
+        selectedMetricsCompareMonth = event.target.value;
         renderCashReports();
         return;
     }
@@ -755,7 +787,7 @@ function ordersTable(orders, title) {
     return orderCards(orders, title, false);
 }
 function clientCards(clients) {
-    return clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Retira:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"success\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"primary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join("") || "<p>No hay clientes para mostrar.</p>";
+    return clients.map(function (client) { return "<article class=\"client-card\"><div class=\"client-avatar\">👤</div><h3>".concat(escapeHtml(client.name), "</h3><p><strong>Tel:</strong> ").concat(escapeHtml(client.phone), "</p><p><strong>Autorizados y celulares:</strong> ").concat(escapeHtml(client.authorizedPickups || "Solo titular"), "</p><p><strong>Notas:</strong> ").concat(escapeHtml(client.notes || "-"), "</p><div class=\"actions\"><button class=\"success\" data-action=\"clientHistory\" data-id=\"").concat(client.id, "\">Historial</button><button class=\"primary\" data-action=\"editClient\" data-id=\"").concat(client.id, "\">Editar cliente</button></div></article>"); }).join("") || "<p>No hay clientes para mostrar.</p>";
 }
 function filterClients(query) {
     var value = String(query || "").toLowerCase();
@@ -819,7 +851,7 @@ function cycleOverlapsRange(cycle, start, end) {
 }
 function machineConflicts(machineName, start, end, ignoreOrderId, ignoreCycleId) {
     return activeScheduleCycles().filter(function (cycle) {
-        if (cycle.machine !== machineName)
+        if (!machineName || !cycle.machine || cycle.machine !== machineName)
             return false;
         if (ignoreOrderId && cycle.order.id === Number(ignoreOrderId) && String(cycle.cycleId) === String(ignoreCycleId))
             return false;
@@ -845,7 +877,7 @@ function nextFreeMachineSlot(type, durationMinutes, fromDate) {
 function schedulePredictions(activeCycles, machines, days) {
     var now = new Date();
     var todayKey = dateKey(now);
-    var occupied = activeCycles.filter(function (cycle) { return cycleOverlapsRange(cycle, now, new Date(now.getTime() + 1)); });
+    var occupied = activeCycles.filter(function (cycle) { return cycle.machine && cycleOverlapsRange(cycle, now, new Date(now.getTime() + 1)); });
     var today = activeCycles.filter(function (cycle) { return dateKey(cycle.start) === todayKey; });
     var wash = nextFreeMachineSlot("Lavado", state.settings.washingMinutes, now);
     var dry = nextFreeMachineSlot("Secado", state.settings.dryingMinutes, now);
@@ -913,7 +945,8 @@ function pendingScheduleTicketsHtml() {
     return '<aside class="pending-ticket-column"><div class="pending-ticket-header"><h3>Pendientes</h3><strong>'.concat(orders.length, '</strong></div>').concat(orders.map(compactOrderTicketHtml).join('') || '<p class="empty-mini">Sin pendientes</p>', '</aside>');
 }
 function compactCycleHtml(cycle) {
-    return '<button class="compact-cycle" draggable="true" data-drag-cycle data-id="'.concat(cycle.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '" data-action="openCycleEdit"><strong>').concat(formatShortDateTime(cycle.start).slice(-5), '</strong><span>').concat(escapeHtml(cycle.machine), '</span><em>').concat(escapeHtml(cyclePersonLabel(cycle)), '</em></button>');
+    var machineLabel = cycle.machine || "Sin máquina";
+    return '<button class="compact-cycle '.concat(cycle.machine ? '' : 'unassigned-cycle', '" draggable="true" data-drag-cycle data-id="').concat(cycle.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '" data-action="openCycleEdit"><strong>').concat(formatShortDateTime(cycle.start).slice(-5), '</strong><span>').concat(escapeHtml(machineLabel), '</span><em>').concat(escapeHtml(cyclePersonLabel(cycle)), '</em></button>');
 }
 function dailyScheduleSlots(date, slotMinutes) {
     var slots = [];
@@ -1008,7 +1041,8 @@ function cycleOptionHtml(selected) {
     return '<option '.concat(selected === "Lavado" ? "selected" : "", '>Lavado</option><option ').concat(selected === "Secado" ? "selected" : "", '>Secado</option><option ').concat(selected === "Bloqueo" ? "selected" : "", '>Bloqueo</option><option ').concat(selected === "Preparación" ? "selected" : "", '>Preparación</option>');
 }
 function machineOptionsHtml(selected) {
-    return scheduleMachines().map(function (machine) { return '<option value="'.concat(escapeHtml(machine.name), '" ').concat(machine.name === selected ? 'selected' : '', '>').concat(escapeHtml(machine.name), '</option>'); }).join('');
+    var options = '<option value="" ' + (!selected ? 'selected' : '') + '>Sin máquina asignada</option>';
+    return options + scheduleMachines().map(function (machine) { return '<option value="'.concat(escapeHtml(machine.name), '" ').concat(machine.name === selected ? 'selected' : '', '>').concat(escapeHtml(machine.name), '</option>'); }).join('');
 }
 function updateSchedulePreview(container) {
     if (!container)
@@ -1162,6 +1196,18 @@ function assignOrderSequence(order, firstType, firstMachine, startAt) {
     }
     return true;
 }
+function assignOrderSequenceWithoutMachine(order, firstType, startAt) {
+    clearAutomaticCycles(order);
+    var cursor = LaundryScheduler.normalizeBusinessStart(startAt || schedulePlanningStart(), state.settings);
+    var requested = cyclesForServiceFromType(order, firstType);
+    for (var index = 0; index < requested.length; index += 1) {
+        var start = new Date(cursor);
+        var end = LaundryScheduler.addWorkingMinutes(start, requested[index].minutes, state.settings);
+        addCycleToOrder(order, { type: requested[index].type, machine: "", start: start.toISOString(), end: end.toISOString(), minutes: requested[index].minutes, manual: true, pendingMachine: true });
+        cursor = end;
+    }
+    return true;
+}
 function assignOrderToCalendarTime(orderId, slotStart) {
     var order = getOrder(orderId);
     var start = new Date(slotStart);
@@ -1169,11 +1215,7 @@ function assignOrderToCalendarTime(orderId, slotStart) {
         return;
     var service = getService(order.serviceId) || state.services[0];
     var firstType = service && service.dry && !(service && service.wash) ? "Secado" : "Lavado";
-    var ok = assignOrderSequence(order, firstType, "", start);
-    if (!ok) {
-        alert("No hay hueco disponible.");
-        return;
-    }
+    assignOrderSequenceWithoutMachine(order, firstType, start);
     selectedScheduleTicketId = 0;
     saveState();
     renderSchedule();
@@ -1306,6 +1348,10 @@ function saveCycleEdit(button) {
         return;
     }
     var end = new Date(start.getTime() + minutes * 60000);
+    if (!data.machine) {
+        alert("Elegí lavarropa o secadora para ocupar la máquina.");
+        return;
+    }
     var conflicts = machineConflicts(data.machine, start, end, found.order.id, found.cycle.cycleId);
     if (conflicts.length && !confirm("Este horario choca con otro trabajo en la misma máquina. ¿Guardar igual?"))
         return;
@@ -1315,6 +1361,7 @@ function saveCycleEdit(button) {
     found.cycle.end = end.toISOString();
     found.cycle.minutes = minutes;
     found.cycle.description = data.description || "";
+    found.cycle.pendingMachine = false;
     found.cycle.manual = true;
     refreshOrderEstimate(found.order);
     saveState();
@@ -1506,7 +1553,9 @@ function cashReportHtml() {
     var topClientHtml = (selected.topClients || []).map(function (client, index) {
         return '<button class="top-client-link" class="success" data-action="clientHistory" data-id="'.concat(client.id, '"><span>#').concat(index + 1, '</span><strong>').concat(escapeHtml(client.name), '</strong><small>').concat(client.count, ' pedidos</small></button>');
     }).join('') || '<p>Sin clientes en este mes.</p>';
-    return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Métricas</p><h2>Resumen mensual</h2><p>Elegí un mes para ver ingresos, egresos, margen, clientes fuertes y horas pico.</p></div>'.concat(rows.length ? monthSelectorHtml(rows, selected.month) : '', '</div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos mes elegido</span><strong>').concat(money(selected.income), '</strong><small>Egresos: ').concat(money(selected.expense), '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(selected.margin, '%</strong><small>Saldo: ').concat(money(selected.balance), '</small></article>\n        <article class="mini-metric metric-glow"><span>Total pedidos por mes</span><strong>').concat(selected.orders, '</strong><small>').concat(escapeHtml(selected.month), '</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? escapeHtml(bestBalance.month) : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cerrá caja para comparar', '</small></article>\n      </div>\n      <div class="metrics-focus-grid"><article class="metric-month-card"><h3>Top 3 clientes del mes</h3><div class="top-client-list">').concat(topClientHtml, '</div></article><article class="metric-month-card"><h3>Pedidos por hora</h3>').concat(orderHourLineChart(selected), '</article></div>\n      ').concat(monthlyCashHtml(selected.month), '\n    </div>');
+    if (!selectedMetricsYear && selected.month !== "Sin datos")
+        selectedMetricsYear = selected.month.slice(0, 4);
+    return '\n    <div class="card report-panel metrics-panel"><div class="toolbar"><div><p class="eyebrow-dark">Métricas</p><h2>Resumen mensual y anual</h2><p>Elegí año, mes principal y mes de comparación para ver si el resultado sube o baja.</p></div>'.concat(rows.length ? monthSelectorHtml(rows, selected.month) : '', '</div>\n      <div class="grid four report-metrics metric-hero-grid">\n        <article class="mini-metric metric-glow"><span>Ingresos mes elegido</span><strong>').concat(money(selected.income), '</strong><small>Egresos: ').concat(money(selected.expense), '</small></article>\n        <article class="mini-metric metric-glow"><span>Margen del mes</span><strong>').concat(selected.margin, '%</strong><small>Saldo: ').concat(money(selected.balance), '</small></article>\n        <article class="mini-metric metric-glow"><span>Total pedidos por mes</span><strong>').concat(selected.orders, '</strong><small>').concat(escapeHtml(selected.month), '</small></article>\n        <article class="mini-metric metric-glow"><span>Mejor mes histórico</span><strong>').concat(bestBalance ? escapeHtml(bestBalance.month) : 'Sin datos', '</strong><small>').concat(bestBalance ? money(bestBalance.balance) : 'Cerrá caja para comparar', '</small></article>\n      </div>\n      ').concat(monthlyPerformanceLineChart(rows, selected.month, selectedMetricsCompareMonth, selectedMetricsYear), '\n      <div class="metrics-focus-grid single-focus"><article class="metric-month-card"><h3>Top 3 clientes del mes</h3><div class="top-client-list">').concat(topClientHtml, '</div></article></div>\n      ').concat(monthlyCashHtml(selected.month), '\n    </div>');
 }
 function renderCash() {
     if (!cashUnlocked) {
@@ -1517,7 +1566,7 @@ function renderCash() {
     var expense = state.cash.filter(function (entry) { return entry.type === "Egreso"; }).reduce(function (sum, entry) { return sum + Number(entry.amount); }, 0);
     var cash = state.cash.filter(function (entry) { return entry.method === "Efectivo"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
     var transfer = state.cash.filter(function (entry) { return entry.method === "Transferencia"; }).reduce(function (sum, entry) { return sum + (entry.type === "Ingreso" ? Number(entry.amount) : -Number(entry.amount)); }, 0);
-    document.getElementById("cash").innerHTML = '\n    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>'.concat(money(income), '</strong></article><article class="card metric"><span>Egresos</span><strong>').concat(money(expense), '</strong></article><article class="card metric"><span>Efectivo</span><strong>').concat(money(cash), '</strong></article><article class="card metric"><span>Transferencia</span><strong>').concat(money(transfer), '</strong></article></div>\n    <div class="card cash-day-hero"><div><p class="eyebrow-dark">Cierre diario</p><h2>Empezar nuevo día</h2><p>Guarda todos los movimientos actuales en la caja histórica y deja la caja diaria en cero.</p></div><button class="danger big-action new-day-button" data-action="closeCashDay">Empezar nuevo día</button></div>\n    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button><button class="secondary" data-action="openDeleteCashModal">Borrar movimiento</button><button class="secondary" data-action="exportHistoricalCash">Exportar caja histórica CSV</button></div></div>').concat(cashTable(), '</div>');
+    document.getElementById("cash").innerHTML = '\n    <div class="grid four"><article class="card metric"><span>Ingresos</span><strong>'.concat(money(income), '</strong></article><article class="card metric"><span>Egresos</span><strong>').concat(money(expense), '</strong></article><article class="card metric"><span>Efectivo</span><strong>').concat(money(cash), '</strong></article><article class="card metric"><span>Transferencia</span><strong>').concat(money(transfer), '</strong></article></div>\n    <div class="card cash-day-hero"><div><p class="eyebrow-dark">Cierre diario</p><h2>Empezar nuevo día</h2><p>Guarda todos los movimientos actuales en la caja histórica y deja la caja diaria en cero.</p></div><button class="danger big-action new-day-button" data-action="closeCashDay">Empezar nuevo día</button></div>\n    <div class="card cash-section"><div class="toolbar"><h2>Caja del día / movimientos</h2><div class="actions"><button class="success" data-action="cashIncome">+ Ingreso</button><button class="danger" data-action="cashExpense">+ Egreso</button><button class="secondary" data-action="exportHistoricalCash">Exportar caja histórica CSV</button></div></div>').concat(cashTable(), '</div>');
 }
 function cashTable() {
     var entries = __spreadArray([], state.cash, true).sort(function (a, b) {
@@ -1559,7 +1608,7 @@ function closeModal() {
 }
 function openClientModal(id) {
     var client = id ? getClient(id) : { name: "", phone: "", address: "", notes: "", authorizedPickups: "" };
-    openModal(id ? "Editar cliente" : "Nuevo cliente", "<form class=\"form-grid\"><label>Nombre<input name=\"name\" required value=\"".concat(escapeHtml(client.name), "\" /></label><label>Tel\u00E9fono WhatsApp<input name=\"phone\" required value=\"").concat(escapeHtml(client.phone), "\" /></label><label>Direcci\u00F3n<input name=\"address\" value=\"").concat(escapeHtml(client.address || ""), "\" /></label><label>Autorizados a retirar<input name=\"authorizedPickups\" placeholder=\"Ej: hijo Juan DNI...\" value=\"").concat(escapeHtml(client.authorizedPickups || ""), "\" /></label><label class=\"full\">Notas<input name=\"notes\" value=\"").concat(escapeHtml(client.notes || ""), "\" /></label><button class=\"primary full\">Guardar cliente</button></form>"), function (form) {
+    openModal(id ? "Editar cliente" : "Nuevo cliente", '<form class="form-grid"><label>Nombre<input name="name" required value="'.concat(escapeHtml(client.name), '" /></label><label>Teléfono WhatsApp<input name="phone" required value="').concat(escapeHtml(client.phone), '" /></label><label>Dirección<input name="address" value="').concat(escapeHtml(client.address || ""), '" /></label><label class="full">Autorizados a retirar y celular de cada uno<textarea name="authorizedPickups" placeholder="Ej: Lucas Gómez - 11 5555-5555 (hijo)&#10;Ana Pérez - 11 4444-4444 (vecina)">').concat(escapeHtml(client.authorizedPickups || ""), '</textarea><small>Ingresá un autorizado por línea con su celular para poder contactarlo.</small></label><label class="full">Notas<input name="notes" value="').concat(escapeHtml(client.notes || ""), '" /></label><button class="primary full">Guardar cliente</button></form>'), function (form) {
         var data = formDataToObject(form);
         if (id)
             for (var key in data) { if (Object.prototype.hasOwnProperty.call(data, key)) client[key] = data[key]; }
@@ -1701,8 +1750,12 @@ function openClientHistoryModal(id) {
     var orders = operationalOrders().filter(function (order) { return order.clientId === Number(id); }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     openModal("Historial de ".concat(escapeHtml(client.name)), orderHistoryRows(orders));
 }
+function cycleHistoryHtml(order) {
+    var cycles = __spreadArray([], order.cycles || [], true).sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
+    return '<div class="turn-history"><h3>Historial de turnos</h3><p>Sirve para rastrear en qué lavarropa o secadora estuvo cada pedido si falta una prenda.</p><table><thead><tr><th>Inicio</th><th>Fin</th><th>Tipo</th><th>Máquina</th><th>Nota</th></tr></thead><tbody>'.concat(cycles.map(function (cycle) { return '<tr><td>'.concat(formatDateTime(cycle.start), '</td><td>').concat(formatDateTime(cycle.end), '</td><td>').concat(escapeHtml(cycle.type), '</td><td>').concat(escapeHtml(cycle.machine || "Sin máquina asignada"), '</td><td>').concat(escapeHtml(cycle.description || (cycle.pendingMachine ? "Pendiente de asignar" : "-")), '</td></tr>'); }).join('') || '<tr><td colspan="5">Este pedido todavía no tiene turnos.</td></tr>', '</tbody></table></div>');
+}
 function orderDetailHtml(order) {
-    return "<div class=\"order-detail\"><p><strong>Cliente:</strong> ".concat(escapeHtml(orderClient(order)), "</p><p><strong>Depósito:</strong> ").concat(escapeHtml(order.location || "Sin asignar"), "</p><p><strong>Estado:</strong> ").concat(escapeHtml(order.status), "</p><p><strong>Pago:</strong> ").concat(escapeHtml(order.paymentStatus || "Pendiente"), " · ").concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), "</p><p><strong>Total:</strong> ").concat(money(order.total), "</p><p><strong>Estimado:</strong> ").concat(formatDateTime(order.estimate), "</p><h3>Prendas / trabajos</h3><ul>").concat((order.items || []).map(function (item) { return "<li>".concat(Number(item.quantity || 1), " x ").concat(escapeHtml(item.name), " · ").concat(escapeHtml(item.serviceName || ""), " · ").concat(money(itemLineTotal(item)), "</li>"); }).join(""), "</ul><p><strong>Observaciones:</strong> ").concat(escapeHtml(order.notes || "Sin observaciones"), "</p><div class=\"actions\"><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div></div>");
+    return '<div class="order-detail"><p><strong>Cliente:</strong> '.concat(escapeHtml(orderClient(order)), '</p><p><strong>Depósito:</strong> ').concat(escapeHtml(order.location || "Sin asignar"), '</p><p><strong>Estado:</strong> ').concat(escapeHtml(order.status), '</p><p><strong>Pago:</strong> ').concat(escapeHtml(order.paymentStatus || "Pendiente"), ' · ').concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), '</p><p><strong>Total:</strong> ').concat(money(order.total), '</p><p><strong>Estimado:</strong> ').concat(formatDateTime(order.estimate), '</p><h3>Prendas / trabajos</h3><ul>').concat((order.items || []).map(function (item) { return '<li>'.concat(Number(item.quantity || 1), ' x ').concat(escapeHtml(item.name), ' · ').concat(escapeHtml(item.serviceName || ""), ' · ').concat(money(itemLineTotal(item)), '</li>'); }).join(""), '</ul>').concat(cycleHistoryHtml(order), '<p><strong>Observaciones:</strong> ').concat(escapeHtml(order.notes || "Sin observaciones"), '</p><div class="actions"><button class="secondary" data-action="editOrderStatus" data-id="').concat(order.id, '">Editar</button><button class="success" data-action="whatsapp" data-id="').concat(order.id, '">WhatsApp</button></div></div>');
 }
 function openOrderViewModal(id) {
     var order = getOrder(id);
@@ -1844,28 +1897,6 @@ function openCashModal(type) {
         closeModal();
         render();
     });
-}
-function openDeleteCashModal() {
-    var entries = __spreadArray([], state.cash, true).sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
-    openModal("Borrar movimiento", '<div class="cash-delete-list">'.concat(entries.map(function (entry) { return '<button class="cash-delete-option" data-action="deleteCashEntry" data-id="'.concat(entry.id, '"><span>').concat(formatDateTime(entry.date), ' · ').concat(escapeHtml(entry.type), ' · ').concat(escapeHtml(entry.category), '</span><strong>').concat(moneySigned(signedCashAmount(entry)), '</strong><small>').concat(escapeHtml(entry.description || "Sin descripción"), '</small></button>'); }).join('') || '<p>No hay movimientos para borrar.</p>', '</div>'));
-}
-function deleteCashEntry(id) {
-    var entry = state.cash.find(function (movement) { return movement.id === Number(id); });
-    if (!entry)
-        return;
-    if (!confirm("¿Borrar este movimiento de caja?"))
-        return;
-    state.cash = state.cash.filter(function (movement) { return movement.id !== Number(id); });
-    if (entry.orderId) {
-        var order = getOrder(entry.orderId);
-        if (order) {
-            order.paymentStatus = "Pendiente";
-            order.paymentSynced = false;
-        }
-    }
-    saveState();
-    closeModal();
-    render();
 }
 function closeCashDay() {
     if (!state.cash.length) {

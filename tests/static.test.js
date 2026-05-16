@@ -45,14 +45,16 @@ for (const feature of [
   'openOrderViewModal',
   'saveMachineSlot',
   'saveQuickMachineSlot',
-  'deleteCashEntry',
   'closeCashDay',
   'exportHistoricalCash',
   'itemLineTotal',
   'orderItemsTotal',
   'orderItemsHtml',
   'topMetrics',
-  'orderHourLineChart',
+  'monthlyPerformanceLineChart',
+  'metricsControlsHtml',
+  'cycleHistoryHtml',
+  'assignOrderSequenceWithoutMachine',
   'monthlyCashHtml',
   'signedCashAmount',
   'filterClients',
@@ -139,6 +141,8 @@ assert.match(app, /saveMachineSlot/, 'machines should allow manual order assignm
 assert.match(app, /schedule-workspace/, 'schedule should use a workspace layout');
 assert.match(app, /pendingScheduleTicketsHtml/, 'schedule should include right pending ticket column');
 assert.match(app, /data-drop-time[\s\S]*assignOrderToCalendarTime/, 'schedule should support dropping tickets on daily time slots');
+assert.match(app, /assignOrderSequenceWithoutMachine[\s\S]*machine: ""[\s\S]*pendingMachine: true/, 'dropping on agenda should create unassigned turns that do not occupy machines until edited');
+assert.match(app, /cycleHistoryHtml[\s\S]*Historial de turnos[\s\S]*Sin máquina asignada/, 'order details should show turn history for machine traceability');
 assert.doesNotMatch(app, /data-drop-machine/, 'machines should be view-only, not drop targets');
 assert.match(app, /data-drop-time[\s\S]*moveCycleToTime/, 'schedule should support moving cycles to daily time slots');
 assert.doesNotMatch(app, /schedule-calendar-panel|<h3>Calendario<\/h3>|simple-calendar-panel/, 'schedule should not render a separate calendar panel');
@@ -154,16 +158,16 @@ assert.match(app, /orderItemsHtml/, 'orders should render itemized garments with
 assert.doesNotMatch(app, /escapeHtml\(itemSummary\(order\)\).*formatDateTime/, 'order header should not duplicate item summary above item list');
 assert.match(app, /data-metrics-month/, 'metrics should allow selecting any month');
 assert.match(app, /top-client-link[\s\S]*clientHistory|clientHistory[\s\S]*Top 3 clientes del mes/, 'metrics should link top clients to histories');
-assert.match(app, /orderHourLineChart[\s\S]*yTicks[\s\S]*polyline/, 'metrics should include a line chart of orders by hour with Y-axis counts');
+assert.doesNotMatch(app, /Pedidos por hora|orderHourLineChart/, 'metrics should remove the orders-by-hour chart');
+assert.match(app, /monthlyPerformanceLineChart[\s\S]*Saldo neto[\s\S]*polyline[\s\S]*Meses del año/, 'metrics should include a large monthly performance line chart with X/Y axis detail');
+assert.match(app, /data-metrics-year[\s\S]*data-metrics-month[\s\S]*data-metrics-compare/, 'metrics should filter by year and month and support month comparison');
 assert.match(app, /Mejor mes histórico[\s\S]*monthlyCashHtml/, 'metrics should include best historical month and monthly cash');
-assert.match(app, /counts\.map[\s\S]*hour-axis-labels/, 'hour chart should render all hours on the x axis');
 assert.doesNotMatch(app, /Idea:|Objetivo:|pie-chart|pieStyle/, 'metrics should not include idea/objective labels or pie charts');
 assert.match(app, /Métricas protegidas|cashReports[\s\S]*cashUnlocked/, 'metrics should require PIN');
 assert.doesNotMatch(app, /💵|🏦/, 'payment method labels should not include emoji icons');
 assert.match(app, /copyWhatsapp[\s\S]*copy-status/, 'WhatsApp copy buttons should show copied feedback');
 assert.match(app, /cash-income-row|cash-expense-row|Saldo final/, 'cash table should group income and expense with totals');
-assert.doesNotMatch(app, /<th>Acciones<\/th>|cash-delete-link/, 'cash table should not show a delete column or inline x action');
-assert.match(app, /openDeleteCashModal[\s\S]*cash-delete-option[\s\S]*deleteCashEntry/, 'cash deletion should happen from a separate selector button');
+assert.doesNotMatch(app, /<th>Acciones<\/th>|cash-delete-link|openDeleteCashModal|deleteCashEntry|Borrar movimiento/, 'cash should not offer deletion for cash entries');
 assert.match(app, /closeCashDay[\s\S]*cashHistory|Empezar nuevo día/, 'cash should close the day into historical storage');
 assert.match(app, /exportHistoricalCash[\s\S]*signedCashAmount[\s\S]*caja-historica[\s\S]*\.csv/, 'cash should export historical cash as CSV with negative expenses');
 assert.match(app, /Exportar caja histórica CSV/, 'cash export button should clearly name the historical cash export');
@@ -185,7 +189,7 @@ assert.match(app, /calendarScheduleCycles[\s\S]*order\.block \|\| \(order\.cycle
 assert.doesNotMatch(app, /whatsappWorkingMessage/, 'WhatsApp should only expose three customer notifications');
 assert.doesNotMatch(app, /whatsappRetiredPaidMessage/, 'WhatsApp should only expose three customer notifications');
 
-for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'hour-line-chart', 'y-axis-title', 'hour-points', 'monthly-cash-panel', 'cash-delete-list', 'cash-delete-option', 'hour-axis-labels', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note', 'friendly-schedule-hero', 'schedule-main-action', 'schedule-simple-summary', 'day-agenda', 'agenda-group', 'agenda-item', 'agenda-time', 'agenda-machine', 'schedule-advanced-actions', 'cycle-quick-actions', 'cycle-quick-button', 'machine-now', 'machine-next', 'machine-finish-time', 'machine-free-state', 'machine-working-state', 'empty-schedule-state', 'schedule-help', 'schedule-simple-hero', 'simple-schedule-summary', 'simple-machine-panel', 'simple-machine-grid', 'simple-machine-card', 'simple-day-agenda', 'simple-agenda-row', 'simple-advanced', 'simple-machine-modal', 'simple-modal-job', 'machine-simple-status', 'machine-simple-actions', 'simple-assign-details', 'simple-date-picker', 'schedule-workspace', 'pending-ticket-column', 'pending-ticket', 'pending-ticket-code', 'pending-ticket-client', 'pending-ticket-meta', 'compact-ticket', 'compact-cycle', 'detail-dot', 'daily-slot-list', 'daily-slot', 'slot-empty', 'selected-ticket']) {
+for (const visualClass of ['nav-button', 'badge', 'storage-grid', 'machine-board', 'timeline-grid', 'hero-card', 'report-panel', 'location-button', 'client-avatar', 'tab-button', 'state-option', 'schedule-controls', 'machine-click', 'blocked', 'item-row', 'payment-badge', 'free-machine-badge', 'machine-assign-form', 'history-item', 'history-list', 'metric-insights', 'metric-bars', 'metric-month-card', 'metrics-month-grid', 'cash-day-hero', 'new-day-button', 'interactive-card', 'metric-glow', 'metrics-focus-grid', 'top-client-link', 'performance-line-card', 'metrics-controls', 'y-axis-title', 'performance-points', 'performance-axis-labels', 'monthly-cash-panel', 'comparison-chip', 'turn-history', 'unassigned-cycle', 'negative-amount', 'order-item-line', 'order-items-list', 'cash-movements-table', 'cash-type-badge', 'cash-expense-row', 'cash-income-row', 'copy-status', 'schedule-free-slots', 'blocked-slot', 'schedule-slot', 'flexible-calendar', 'schedule-quick-actions', 'schedule-prediction-strip', 'schedule-calendar-panel', 'machine-status-card', 'dynamic-machine-board', 'schedule-machine-overview', 'schedule-preview-note', 'friendly-schedule-hero', 'schedule-main-action', 'schedule-simple-summary', 'day-agenda', 'agenda-group', 'agenda-item', 'agenda-time', 'agenda-machine', 'schedule-advanced-actions', 'cycle-quick-actions', 'cycle-quick-button', 'machine-now', 'machine-next', 'machine-finish-time', 'machine-free-state', 'machine-working-state', 'empty-schedule-state', 'schedule-help', 'schedule-simple-hero', 'simple-schedule-summary', 'simple-machine-panel', 'simple-machine-grid', 'simple-machine-card', 'simple-day-agenda', 'simple-agenda-row', 'simple-advanced', 'simple-machine-modal', 'simple-modal-job', 'machine-simple-status', 'machine-simple-actions', 'simple-assign-details', 'simple-date-picker', 'schedule-workspace', 'pending-ticket-column', 'pending-ticket', 'pending-ticket-code', 'pending-ticket-client', 'pending-ticket-meta', 'compact-ticket', 'compact-cycle', 'detail-dot', 'daily-slot-list', 'daily-slot', 'slot-empty', 'selected-ticket']) {
   assert.match(styles, new RegExp(visualClass), `missing visual class ${visualClass}`);
 }
 
