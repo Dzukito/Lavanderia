@@ -920,7 +920,7 @@ function schedulePlanningStart() {
     return LaundryScheduler.normalizeBusinessStart(new Date(date + "T" + time + ":00"), state.settings);
 }
 function pendingScheduleOrders() {
-    return operationalOrders().filter(function (order) { return order.status === "Pendiente"; }).sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
+    return operationalOrders().filter(function (order) { return order.status === "Pendiente" && !(order.cycles || []).length; }).sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
 }
 function estimatedOrderMinutes(order) {
     var service = getService(order.serviceId) || state.services[0];
@@ -938,7 +938,7 @@ function shortTicketLabel(order) {
 }
 function compactOrderTicketHtml(order) {
     var selected = selectedScheduleTicketId === order.id ? " selected-ticket" : "";
-    return '<article class="pending-ticket compact-ticket'.concat(selected, '" draggable="true" data-drag-ticket data-order-id="').concat(order.id, '"><button class="pending-ticket-main" data-action="selectScheduleTicket" data-id="').concat(order.id, '"><strong class="pending-ticket-code">').concat(escapeHtml(customerOrderCode(order)), '</strong><span class="pending-ticket-client">').concat(escapeHtml(orderClient(order)), '</span><small class="pending-ticket-meta">').concat(escapeHtml(shortTicketLabel(order)), ' · ').concat(estimatedOrderMinutes(order), ' min</small></button><button class="detail-dot" data-action="scheduleTicketDetail" data-id="').concat(order.id, '">Ver</button></article>');
+    return '<article class="pending-ticket compact-ticket'.concat(selected, '" draggable="true" data-drag-ticket data-action="selectScheduleTicket" data-id="').concat(order.id, '" data-order-id="').concat(order.id, '" role="button" tabindex="0"><div class="pending-ticket-main"><strong class="pending-ticket-code">').concat(escapeHtml(customerOrderCode(order)), '</strong><span class="pending-ticket-client">').concat(escapeHtml(orderClient(order)), '</span><small class="pending-ticket-meta">').concat(escapeHtml(shortTicketLabel(order)), ' · ').concat(estimatedOrderMinutes(order), ' min</small></div><button class="detail-dot" data-action="scheduleTicketDetail" data-id="').concat(order.id, '">Ver</button></article>');
 }
 function pendingScheduleTicketsHtml() {
     var orders = pendingScheduleOrders();
@@ -993,9 +993,14 @@ function renderSchedule() {
     html += schedulePrimarySummary(prediction);
     html += "<div class=\"card schedule-machine-overview simple-machine-panel\"><div class=\"simple-section-title\"><h3>Lavarropas</h3></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles) + "<div class=\"simple-section-title\"><h3>Secadoras</h3></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles) + "</div>";
     html += scheduleDayAgendaHtml(calendarCycles, new Date(scheduleSelectedDate + "T00:00:00"));
+    html += globalTurnHistoryHtml(calendarCycles);
     html += "<details class=\"card schedule-advanced-actions simple-advanced\"><summary><strong>Opciones manuales</strong></summary><div class=\"schedule-quick-actions simple-manual-actions\"><button class=\"secondary\" data-action=\"openMachineBlockModal\">Reservar máquina</button><button class=\"secondary\" data-action=\"openUnscheduledOrdersModal\">Pedidos sin máquina</button><button class=\"secondary\" data-action=\"openFreeSlotFinder\">Buscar libre</button></div></details>";
     html += "</main>" + pendingScheduleTicketsHtml() + "</div>";
     document.getElementById("schedule").innerHTML = html;
+}
+function globalTurnHistoryHtml(cycles) {
+    var ordered = __spreadArray([], cycles || [], true).sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
+    return '<div class="card global-turn-history"><div class="toolbar"><div><p class="eyebrow-dark">Historial global</p><h3>Historial de turnos</h3><p>Registro único de lavarropas/secadoras usados por todos los pedidos.</p></div></div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Pedido</th><th>Cliente</th><th>Tipo</th><th>Máquina</th><th>Horario</th><th>Nota</th></tr></thead><tbody>'.concat(ordered.map(function (cycle) { return '<tr><td>'.concat(formatShortDateTime(cycle.start).slice(0, 8), '</td><td>').concat(escapeHtml(orderDisplayCode(cycle.order)), '</td><td>').concat(escapeHtml(orderClient(cycle.order)), '</td><td>').concat(escapeHtml(cycle.type), '</td><td>').concat(escapeHtml(cycle.machine || "Sin máquina asignada"), '</td><td>').concat(formatShortDateTime(cycle.start).slice(-5), ' - ').concat(formatShortDateTime(cycle.end).slice(-5), '</td><td>').concat(escapeHtml(cycle.description || (cycle.pendingMachine ? "Pendiente de asignar" : "-")), '</td></tr>'); }).join('') || '<tr><td colspan="7">Todavía no hay turnos registrados.</td></tr>', '</tbody></table></div></div>');
 }
 function scheduleDayAgendaHtml(calendarCycles, selectedDate) {
     var key = dateKey(selectedDate);
@@ -1750,12 +1755,8 @@ function openClientHistoryModal(id) {
     var orders = operationalOrders().filter(function (order) { return order.clientId === Number(id); }).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     openModal("Historial de ".concat(escapeHtml(client.name)), orderHistoryRows(orders));
 }
-function cycleHistoryHtml(order) {
-    var cycles = __spreadArray([], order.cycles || [], true).sort(function (a, b) { return new Date(a.start) - new Date(b.start); });
-    return '<div class="turn-history"><h3>Historial de turnos</h3><p>Sirve para rastrear en qué lavarropa o secadora estuvo cada pedido si falta una prenda.</p><table><thead><tr><th>Inicio</th><th>Fin</th><th>Tipo</th><th>Máquina</th><th>Nota</th></tr></thead><tbody>'.concat(cycles.map(function (cycle) { return '<tr><td>'.concat(formatDateTime(cycle.start), '</td><td>').concat(formatDateTime(cycle.end), '</td><td>').concat(escapeHtml(cycle.type), '</td><td>').concat(escapeHtml(cycle.machine || "Sin máquina asignada"), '</td><td>').concat(escapeHtml(cycle.description || (cycle.pendingMachine ? "Pendiente de asignar" : "-")), '</td></tr>'); }).join('') || '<tr><td colspan="5">Este pedido todavía no tiene turnos.</td></tr>', '</tbody></table></div>');
-}
 function orderDetailHtml(order) {
-    return '<div class="order-detail"><p><strong>Cliente:</strong> '.concat(escapeHtml(orderClient(order)), '</p><p><strong>Depósito:</strong> ').concat(escapeHtml(order.location || "Sin asignar"), '</p><p><strong>Estado:</strong> ').concat(escapeHtml(order.status), '</p><p><strong>Pago:</strong> ').concat(escapeHtml(order.paymentStatus || "Pendiente"), ' · ').concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), '</p><p><strong>Total:</strong> ').concat(money(order.total), '</p><p><strong>Estimado:</strong> ').concat(formatDateTime(order.estimate), '</p><h3>Prendas / trabajos</h3><ul>').concat((order.items || []).map(function (item) { return '<li>'.concat(Number(item.quantity || 1), ' x ').concat(escapeHtml(item.name), ' · ').concat(escapeHtml(item.serviceName || ""), ' · ').concat(money(itemLineTotal(item)), '</li>'); }).join(""), '</ul>').concat(cycleHistoryHtml(order), '<p><strong>Observaciones:</strong> ').concat(escapeHtml(order.notes || "Sin observaciones"), '</p><div class="actions"><button class="secondary" data-action="editOrderStatus" data-id="').concat(order.id, '">Editar</button><button class="success" data-action="whatsapp" data-id="').concat(order.id, '">WhatsApp</button></div></div>');
+    return '<div class="order-detail"><p><strong>Cliente:</strong> '.concat(escapeHtml(orderClient(order)), '</p><p><strong>Depósito:</strong> ').concat(escapeHtml(order.location || "Sin asignar"), '</p><p><strong>Estado:</strong> ').concat(escapeHtml(order.status), '</p><p><strong>Pago:</strong> ').concat(escapeHtml(order.paymentStatus || "Pendiente"), ' · ').concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), '</p><p><strong>Total:</strong> ').concat(money(order.total), '</p><p><strong>Estimado:</strong> ').concat(formatDateTime(order.estimate), '</p><h3>Prendas / trabajos</h3><ul>').concat((order.items || []).map(function (item) { return '<li>'.concat(Number(item.quantity || 1), ' x ').concat(escapeHtml(item.name), ' · ').concat(escapeHtml(item.serviceName || ""), ' · ').concat(money(itemLineTotal(item)), '</li>'); }).join(""), '</ul>').concat('<p><strong>Observaciones:</strong> ').concat(escapeHtml(order.notes || "Sin observaciones"), '</p><div class="actions"><button class="secondary" data-action="editOrderStatus" data-id="').concat(order.id, '">Editar</button><button class="success" data-action="whatsapp" data-id="').concat(order.id, '">WhatsApp</button></div></div>');
 }
 function openOrderViewModal(id) {
     var order = getOrder(id);

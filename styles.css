@@ -526,3 +526,4 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .turn-history th, .turn-history td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; }
 @media (max-width: 760px) { .metrics-controls { grid-template-columns: 1fr; } }
 .performance-points { pointer-events: all; }
+.global-turn-history { border-top: 6px solid var(--primary); }
