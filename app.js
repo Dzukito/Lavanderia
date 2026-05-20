@@ -889,9 +889,10 @@ function machineTypeFromCycle(cycle) {
     return cycle && cycle.type === "Secado" ? "Secado" : cycle && cycle.type === "Bloqueo" ? "Reservada" : "Lavando";
 }
 function currentCycleForMachine(machineName, activeCycles) {
-    var now = new Date();
+    var dayStart = new Date(String(scheduleSelectedDate || localDateInput()) + "T00:00:00");
+    var dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60000);
     for (var index = 0; index < activeCycles.length; index += 1) {
-        if (activeCycles[index].machine === machineName && cycleOverlapsRange(activeCycles[index], now, new Date(now.getTime() + 1)))
+        if (activeCycles[index].machine === machineName && cycleOverlapsRange(activeCycles[index], dayStart, dayEnd))
             return activeCycles[index];
     }
     return null;
@@ -948,7 +949,8 @@ function pendingScheduleTicketsHtml() {
 }
 function compactCycleHtml(cycle) {
     var machineLabel = cycle.machine || "Sin máquina";
-    return '<button class="compact-cycle '.concat(cycle.machine ? '' : 'unassigned-cycle', '" draggable="true" data-drag-cycle data-id="').concat(cycle.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '" data-action="openCycleEdit"><strong>').concat(formatShortDateTime(cycle.start).slice(-5), '</strong><span>').concat(escapeHtml(machineLabel), '</span><em>').concat(escapeHtml(cyclePersonLabel(cycle)), '</em></button>');
+    var assignLabel = cycle.machine ? "<small class=\"assigned-flag\">ASIGNADO</small>" : "";
+    return '<button class="compact-cycle '.concat(cycle.machine ? '' : 'unassigned-cycle', '" draggable="true" data-drag-cycle data-id="').concat(cycle.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '" data-action="openCycleEdit"><strong>').concat(formatShortDateTime(cycle.start).slice(-5), '</strong><span>').concat(escapeHtml(machineLabel), '</span>').concat(assignLabel, '<em>').concat(escapeHtml(cyclePersonLabel(cycle)), '</em></button>');
 }
 function dailyScheduleSlots(date, slotMinutes) {
     var slots = [];
@@ -1258,20 +1260,16 @@ function moveCycleToMachineName(orderId, cycleId, machineName) {
 }
 function moveCycleToTime(orderId, cycleId, newStart) {
     var found = findOrderCycle(orderId, cycleId);
-    if (!found)
-        return;
+    if (!found) return;
     var start = new Date(newStart);
-    var minutes = Number(found.cycle.minutes || Math.max(1, Math.round((new Date(found.cycle.end) - new Date(found.cycle.start)) / 60000)));
-    if (isNaN(start.getTime()) || !minutes)
-        return;
-    var end = new Date(start.getTime() + minutes * 60000);
-    var conflicts = machineConflicts(found.cycle.machine, start, end, found.order.id, found.cycle.cycleId);
-    if (conflicts.length && !confirm("Ese horario está ocupado. ¿Mover igual?"))
-        return;
-    found.cycle.start = start.toISOString();
-    found.cycle.end = end.toISOString();
-    found.cycle.minutes = minutes;
-    found.cycle.manual = true;
+    if (isNaN(start.getTime())) return;
+    var delta = start.getTime() - new Date(found.cycle.start).getTime();
+    var cycles = found.order.cycles || [];
+    for (var i = 0; i < cycles.length; i += 1) {
+        cycles[i].start = new Date(new Date(cycles[i].start).getTime() + delta).toISOString();
+        cycles[i].end = new Date(new Date(cycles[i].end).getTime() + delta).toISOString();
+        cycles[i].manual = true;
+    }
     refreshOrderEstimate(found.order);
     saveState();
     renderSchedule();
@@ -1348,30 +1346,37 @@ function machineAvailabilityBoxes(startTime, endTime, currentScheduledTurnId) {
 }
 function openMachineAssignModal(orderId, cycleId) {
     var found = findOrderCycle(orderId, cycleId); if (!found) return;
-    var type = cycleMachineType(found.cycle);
-    var total = type === "Secado" ? Number(state.settings.dryers || 1) : Number(state.settings.smallWashers || 1);
-    var currentNumber = found.cycle.machine ? Number(String(found.cycle.machine).replace(/\D/g, "")) : 0;
-    var currentId = String(found.order.id) + ":" + String(found.cycle.cycleId);
-    var options = '';
-    for (var i = 1; i <= total; i += 1) {
-        var free = isResourceAvailable(type, i, found.cycle.start, found.cycle.end, currentId);
-        var selected = currentNumber === i || (!currentNumber && free);
-        options += '<option value="' + i + '" ' + (selected ? 'selected' : '') + ' ' + (free ? '' : 'disabled') + '>' + i + (free ? ' (libre)' : ' (ocupada)') + '</option>';
+    var orderCycles = (found.order.cycles || []).filter(function (cycle) { return cycle.type === "Lavado" || cycle.type === "Secado"; });
+    var washCycle = orderCycles.find(function (cycle) { return cycle.type === "Lavado"; });
+    var dryCycle = orderCycles.find(function (cycle) { return cycle.type === "Secado"; });
+    function machineOptions(type, currentCycle) {
+        var total = type === "Secado" ? Number(state.settings.dryers || 0) : Number(state.settings.smallWashers || 0);
+        var currentNumber = currentCycle && currentCycle.machine ? Number(String(currentCycle.machine).replace(/\D/g, "")) : 0;
+        var currentId = currentCycle ? String(found.order.id) + ":" + String(currentCycle.cycleId) : "";
+        var opts = '<option value="">Sin asignar</option>';
+        for (var i=1;i<=total;i+=1) {
+            var free = currentCycle ? isResourceAvailable(type, i, currentCycle.start, currentCycle.end, currentId) : true;
+            opts += '<option value="'+i+'" '+(currentNumber===i?'selected':'')+' '+(free?'':'disabled')+'>'+i+(free?' (libre)':' (ocupada)')+'</option>';
+        }
+        return opts;
     }
-    var removeBtn = found.cycle.machine ? '<button class="danger" type="button" data-action="clearCycleMachine" data-id="' + found.order.id + '" data-cycle-id="' + escapeHtml(found.cycle.cycleId) + '">Quitar asignación</button>' : '';
-    var html = '<form class="form-grid"><label>Tipo de recurso<select name="resourceType"><option value="Lavado" ' + (type === 'Lavado' ? 'selected' : '') + '>Lavarropas</option><option value="Secado" ' + (type === 'Secado' ? 'selected' : '') + '>Secadora</option></select></label><label>Número de máquina<select name="machineNumber">' + options + '</select></label><p class="full">' + machineAvailabilityBoxes(found.cycle.start, found.cycle.end, currentId) + '</p><div class="actions full"><button class="primary" type="button" data-action="saveCycleMachine" data-id="' + found.order.id + '" data-cycle-id="' + escapeHtml(found.cycle.cycleId) + '">Guardar</button><button class="secondary" type="button" data-close-modal>Cancelar</button>' + removeBtn + '</div></form>';
+    var html = '<form class="form-grid"><label>Lavarropas<select name="washMachine">' + machineOptions("Lavado", washCycle) + '</select></label><label>Secadora<select name="dryMachine">' + machineOptions("Secado", dryCycle) + '</select></label><p class="full">' + machineAvailabilityBoxes((washCycle || dryCycle || found.cycle).start, (washCycle || dryCycle || found.cycle).end, String(found.order.id)+":"+String(found.cycle.cycleId)) + '</p><div class="actions full"><button class="primary" type="button" data-action="saveCycleMachine" data-id="' + found.order.id + '" data-cycle-id="' + escapeHtml(found.cycle.cycleId) + '">Guardar</button><button class="secondary" type="button" data-close-modal>Cancelar</button><button class="danger" type="button" data-action="clearCycleMachine" data-id="' + found.order.id + '" data-cycle-id="' + escapeHtml(found.cycle.cycleId) + '">Quitar asignación</button></div></form>';
     openModal("Asignar máquina", html);
 }
 function saveCycleMachine(button) {
     var found = findOrderCycle(button.getAttribute("data-id"), button.getAttribute("data-cycle-id")); if (!found) return;
     var data = formDataToObject(button.closest("form"));
-    var type = data.resourceType === "Secado" ? "Secado" : "Lavado";
-    var number = Number(data.machineNumber || 0);
-    if (!number) { alert("Elegí una máquina."); return; }
-    if (!isResourceAvailable(type, number, found.cycle.start, found.cycle.end, String(found.order.id) + ":" + String(found.cycle.cycleId))) { alert("Esa máquina ya está ocupada en ese horario."); return; }
-    found.cycle.type = type;
-    found.cycle.machine = (type === "Secado" ? "Secadora " : "Lavarropas ") + String(number);
-    found.cycle.pendingMachine = false;
+    var washNumber = Number(data.washMachine || 0);
+    var dryNumber = Number(data.dryMachine || 0);
+    var cycles = found.order.cycles || [];
+    var washCycle = cycles.find(function (cycle) { return cycle.type === "Lavado"; });
+    var dryCycle = cycles.find(function (cycle) { return cycle.type === "Secado"; });
+    if (washCycle && washNumber && !isResourceAvailable("Lavado", washNumber, washCycle.start, washCycle.end, String(found.order.id)+":"+String(washCycle.cycleId))) { alert("Esa máquina ya está ocupada en ese horario."); return; }
+    if (dryCycle && dryNumber && !isResourceAvailable("Secado", dryNumber, dryCycle.start, dryCycle.end, String(found.order.id)+":"+String(dryCycle.cycleId))) { alert("Esa máquina ya está ocupada en ese horario."); return; }
+    cycles.forEach(function (cycle) {
+        if (cycle.type === "Lavado") { cycle.machine = washNumber ? "Lavarropas " + String(washNumber) : ""; cycle.pendingMachine = !washNumber; }
+        if (cycle.type === "Secado") { cycle.machine = dryNumber ? "Secadora " + String(dryNumber) : ""; cycle.pendingMachine = !dryNumber; }
+    });
     saveCycleAndRefresh(found);
 }
 function clearCycleMachine(orderId, cycleId) {

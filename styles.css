@@ -531,3 +531,4 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 .machine-pill { border-radius:999px; font-weight:900; padding:6px 10px; }
 .machine-pill.free { background:#d3f9d8; color:#2b8a3e; }
 .machine-pill.busy { background:#ffe3e3; color:#c92a2a; }
+.assigned-flag { background:#fa5252; border-radius:999px; color:white; display:inline-block; font-size:10px; font-weight:900; padding:2px 7px; }
