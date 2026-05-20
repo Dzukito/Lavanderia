@@ -560,8 +560,10 @@ document.addEventListener("click", function (event) {
         rescheduleActiveOrders: rescheduleActiveOrders,
         openFreeSlotFinder: openFreeSlotFinder,
         openUnscheduledOrdersModal: openUnscheduledOrdersModal,
-        openCycleEdit: function () { return openCycleEditModal(id, target.getAttribute("data-cycle-id")); },
+        openCycleEdit: function () { return openMachineAssignModal(id, target.getAttribute("data-cycle-id")); },
         saveCycleEdit: function () { return saveCycleEdit(target); },
+        saveCycleMachine: function () { return saveCycleMachine(target); },
+        clearCycleMachine: function () { return clearCycleMachine(id, target.getAttribute("data-cycle-id")); },
         deleteCycle: function () { return deleteCycle(id, target.getAttribute("data-cycle-id")); },
         shiftCycle: function () { return shiftCycleMinutes(id, target.getAttribute("data-cycle-id"), target.getAttribute("data-minutes")); },
         moveCycleNextFree: function () { return moveCycleToNextFreeSlot(id, target.getAttribute("data-cycle-id")); },
@@ -920,7 +922,7 @@ function schedulePlanningStart() {
     return LaundryScheduler.normalizeBusinessStart(new Date(date + "T" + time + ":00"), state.settings);
 }
 function pendingScheduleOrders() {
-    return operationalOrders().filter(function (order) { return order.status === "Pendiente" && !(order.cycles || []).length; }).sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
+    return operationalOrders().filter(function (order) { return order.status === "Pendiente"; }).sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
 }
 function estimatedOrderMinutes(order) {
     var service = getService(order.serviceId) || state.services[0];
@@ -1000,7 +1002,7 @@ function renderSchedule() {
 }
 function globalTurnHistoryHtml(cycles) {
     var ordered = __spreadArray([], cycles || [], true).sort(function (a, b) { return new Date(b.start) - new Date(a.start); });
-    return '<div class="card global-turn-history"><div class="toolbar"><div><p class="eyebrow-dark">Historial global</p><h3>Historial de turnos</h3><p>Registro único de lavarropas/secadoras usados por todos los pedidos.</p></div></div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Pedido</th><th>Cliente</th><th>Tipo</th><th>Máquina</th><th>Horario</th><th>Nota</th></tr></thead><tbody>'.concat(ordered.map(function (cycle) { return '<tr><td>'.concat(formatShortDateTime(cycle.start).slice(0, 8), '</td><td>').concat(escapeHtml(orderDisplayCode(cycle.order)), '</td><td>').concat(escapeHtml(orderClient(cycle.order)), '</td><td>').concat(escapeHtml(cycle.type), '</td><td>').concat(escapeHtml(cycle.machine || "Sin máquina asignada"), '</td><td>').concat(formatShortDateTime(cycle.start).slice(-5), ' - ').concat(formatShortDateTime(cycle.end).slice(-5), '</td><td>').concat(escapeHtml(cycle.description || (cycle.pendingMachine ? "Pendiente de asignar" : "-")), '</td></tr>'); }).join('') || '<tr><td colspan="7">Todavía no hay turnos registrados.</td></tr>', '</tbody></table></div></div>');
+    return '<details class="card global-turn-history"><summary class="secondary history-toggle">Historial global de turnos</summary><div class="toolbar"><div><p class="eyebrow-dark">Historial global</p><h3>Historial de turnos</h3><p>Registro único de lavarropas/secadoras usados por todos los pedidos.</p></div></div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Pedido</th><th>Cliente</th><th>Tipo</th><th>Máquina</th><th>Horario</th><th>Nota</th></tr></thead><tbody>'.concat(ordered.map(function (cycle) { return '<tr><td>'.concat(formatShortDateTime(cycle.start).slice(0, 8), '</td><td>').concat(escapeHtml(orderDisplayCode(cycle.order)), '</td><td>').concat(escapeHtml(orderClient(cycle.order)), '</td><td>').concat(escapeHtml(cycle.type), '</td><td>').concat(escapeHtml(cycle.machine || "Sin máquina asignada"), '</td><td>').concat(formatShortDateTime(cycle.start).slice(-5), ' - ').concat(formatShortDateTime(cycle.end).slice(-5), '</td><td>').concat(escapeHtml(cycle.description || (cycle.pendingMachine ? "Pendiente de asignar" : "-")), '</td></tr>'); }).join('') || '<tr><td colspan="7">Todavía no hay turnos registrados.</td></tr>', '</tbody></table></div></details>');
 }
 function scheduleDayAgendaHtml(calendarCycles, selectedDate) {
     var key = dateKey(selectedDate);
@@ -1325,6 +1327,57 @@ function findOrderCycle(orderId, cycleId) {
             return { order: order, cycle: order.cycles[index], index: index };
     }
     return null;
+}
+function cycleMachineType(cycle) { return cycle && cycle.type === "Secado" ? "Secado" : "Lavado"; }
+function isResourceAvailable(resourceType, machineNumber, startTime, endTime, currentScheduledTurnId) {
+    var machineName = (resourceType === "Secado" ? "Secadora " : "Lavarropas ") + String(machineNumber);
+    var ids = String(currentScheduledTurnId || ":").split(":");
+    var found = findOrderCycle(ids[0], ids[1]);
+    var ignoreOrderId = found ? found.order.id : 0;
+    var ignoreCycleId = found ? found.cycle.cycleId : "";
+    return !machineConflicts(machineName, new Date(startTime), new Date(endTime), ignoreOrderId, ignoreCycleId).length;
+}
+function machineAvailabilityBoxes(startTime, endTime, currentScheduledTurnId) {
+    var washTotal = Number(state.settings.smallWashers || 0);
+    var dryTotal = Number(state.settings.dryers || 0);
+    var html = '<div class="machine-availability-row"><strong>Lavarropas</strong>';
+    for (var w = 1; w <= washTotal; w += 1) html += '<span class="machine-pill ' + (isResourceAvailable("Lavado", w, startTime, endTime, currentScheduledTurnId) ? 'free' : 'busy') + '">L ' + w + '</span>';
+    html += '</div><div class="machine-availability-row"><strong>Secadoras</strong>';
+    for (var d = 1; d <= dryTotal; d += 1) html += '<span class="machine-pill ' + (isResourceAvailable("Secado", d, startTime, endTime, currentScheduledTurnId) ? 'free' : 'busy') + '">S ' + d + '</span>';
+    return html + '</div>';
+}
+function openMachineAssignModal(orderId, cycleId) {
+    var found = findOrderCycle(orderId, cycleId); if (!found) return;
+    var type = cycleMachineType(found.cycle);
+    var total = type === "Secado" ? Number(state.settings.dryers || 1) : Number(state.settings.smallWashers || 1);
+    var currentNumber = found.cycle.machine ? Number(String(found.cycle.machine).replace(/\D/g, "")) : 0;
+    var currentId = String(found.order.id) + ":" + String(found.cycle.cycleId);
+    var options = '';
+    for (var i = 1; i <= total; i += 1) {
+        var free = isResourceAvailable(type, i, found.cycle.start, found.cycle.end, currentId);
+        var selected = currentNumber === i || (!currentNumber && free);
+        options += '<option value="' + i + '" ' + (selected ? 'selected' : '') + ' ' + (free ? '' : 'disabled') + '>' + i + (free ? ' (libre)' : ' (ocupada)') + '</option>';
+    }
+    var removeBtn = found.cycle.machine ? '<button class="danger" type="button" data-action="clearCycleMachine" data-id="' + found.order.id + '" data-cycle-id="' + escapeHtml(found.cycle.cycleId) + '">Quitar asignación</button>' : '';
+    var html = '<form class="form-grid"><label>Tipo de recurso<select name="resourceType"><option value="Lavado" ' + (type === 'Lavado' ? 'selected' : '') + '>Lavarropas</option><option value="Secado" ' + (type === 'Secado' ? 'selected' : '') + '>Secadora</option></select></label><label>Número de máquina<select name="machineNumber">' + options + '</select></label><p class="full">' + machineAvailabilityBoxes(found.cycle.start, found.cycle.end, currentId) + '</p><div class="actions full"><button class="primary" type="button" data-action="saveCycleMachine" data-id="' + found.order.id + '" data-cycle-id="' + escapeHtml(found.cycle.cycleId) + '">Guardar</button><button class="secondary" type="button" data-close-modal>Cancelar</button>' + removeBtn + '</div></form>';
+    openModal("Asignar máquina", html);
+}
+function saveCycleMachine(button) {
+    var found = findOrderCycle(button.getAttribute("data-id"), button.getAttribute("data-cycle-id")); if (!found) return;
+    var data = formDataToObject(button.closest("form"));
+    var type = data.resourceType === "Secado" ? "Secado" : "Lavado";
+    var number = Number(data.machineNumber || 0);
+    if (!number) { alert("Elegí una máquina."); return; }
+    if (!isResourceAvailable(type, number, found.cycle.start, found.cycle.end, String(found.order.id) + ":" + String(found.cycle.cycleId))) { alert("Esa máquina ya está ocupada en ese horario."); return; }
+    found.cycle.type = type;
+    found.cycle.machine = (type === "Secado" ? "Secadora " : "Lavarropas ") + String(number);
+    found.cycle.pendingMachine = false;
+    saveCycleAndRefresh(found);
+}
+function clearCycleMachine(orderId, cycleId) {
+    var found = findOrderCycle(orderId, cycleId); if (!found) return;
+    found.cycle.machine = ""; found.cycle.pendingMachine = true;
+    saveCycleAndRefresh(found);
 }
 function openCycleEditModal(orderId, cycleId) {
     var found = findOrderCycle(orderId, cycleId);

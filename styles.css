@@ -527,3 +527,7 @@ input[readonly] { background: #eef4ff; color: var(--primary-dark); font-weight: 
 @media (max-width: 760px) { .metrics-controls { grid-template-columns: 1fr; } }
 .performance-points { pointer-events: all; }
 .global-turn-history { border-top: 6px solid var(--primary); }
+.machine-availability-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+.machine-pill { border-radius:999px; font-weight:900; padding:6px 10px; }
+.machine-pill.free { background:#d3f9d8; color:#2b8a3e; }
+.machine-pill.busy { background:#ffe3e3; color:#c92a2a; }
