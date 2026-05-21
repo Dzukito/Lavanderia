@@ -228,7 +228,7 @@ function loadState() {
         var status = ["Retirado", "Abonado"].includes(order.status) ? "Retirado" : order.status === "Listo para retirar" ? "Listo" : ["Pendiente", "Listo", "Retirado"].includes(order.status) ? order.status : "Pendiente";
         var items = order.items && order.items.length ? order.items : [{ name: serviceSummary(order), serviceId: order.serviceId, price: Number(order.total || 0), quantity: 1 }];
         items = items.map(function (item) { return __assign({ quantity: 1 }, item); });
-        return ensureOrderCycleIds(__assign(__assign({}, order), { status: status, paymentStatus: paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items: items }));
+        return ensureOrderCycleIds(__assign(__assign({}, order), { status: status, paymentStatus: paymentStatus, paymentMethod: order.paymentMethod || "Efectivo", cycles: order.cycles || [], items: items, retrievedAt: order.retrievedAt || (status === "Retirado" ? order.updatedAt || new Date().toISOString() : "") }));
     });
     return merged;
 }
@@ -783,7 +783,7 @@ window.filterOrders = function (query, date) {
 };
 function orderCards(orders, title, compact) {
     if (compact === void 0) { compact = false; }
-    return "\n    <div class=\"card orders-panel\">\n      <h2>".concat(escapeHtml(title), "</h2>\n      <div class=\"order-card-list\">").concat(orders.map(function (order) { return "\n        <article class=\"order-card ".concat(normalizeClass(orderGroup(order)), "\">\n          <div class=\"order-main\"><strong class=\"order-code\">").concat(escapeHtml(orderDisplayCode(order)), "</strong><span class=\"badge ").concat(normalizeClass(orderGroup(order)), "\">").concat(escapeHtml(orderGroup(order)), "</span></div>\n          <div><strong>").concat(escapeHtml(orderClient(order)), "</strong><br><small>Estimado: ").concat(formatDateTime(order.estimate), "</small></div>\n          ").concat(orderItemsHtml(order), "\n          <p class=\"order-notes\">").concat(escapeHtml(order.notes || "Sin observaciones"), "</p>\n          <div class=\"order-meta\"><span>Pago: ").concat(paymentBadge(order), " ").concat(paymentMethodLabel(order.paymentMethod), "</span><span>Total: ").concat(money(order.total), "</span></div>\n          <div class=\"actions\"><button class=\"secondary\" data-action=\"orderState\" data-id=\"").concat(order.id, "\">Estado</button><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div>\n        </article>"); }).join("") || "<p>No hay pedidos para mostrar.</p>", "</div>\n    </div>");
+    return "\n    <div class=\"card orders-panel\">\n      <h2>".concat(escapeHtml(title), "</h2>\n      <div class=\"order-card-list\">").concat(orders.map(function (order) { return "\n        <article class=\"order-card ".concat(normalizeClass(orderGroup(order)), "\">\n          <div class=\"order-main\"><strong class=\"order-code\">").concat(escapeHtml(orderDisplayCode(order)), "</strong><span class=\"badge ").concat(normalizeClass(orderGroup(order)), "\">").concat(escapeHtml(orderGroup(order)), "</span></div>\n          <div><strong>").concat(escapeHtml(orderClient(order)), "</strong><br><small>Ingreso: ").concat(formatDateTime(order.createdAt), " · Retiro: ").concat(order.retrievedAt ? formatDateTime(order.retrievedAt) : "Pendiente", "</small></div>\n          ").concat(orderItemsHtml(order), "\n          <p class=\"order-notes\">").concat(escapeHtml(order.notes || "Sin observaciones"), "</p>\n          <div class=\"order-meta\"><span>Pago: ").concat(paymentBadge(order), " ").concat(paymentMethodLabel(order.paymentMethod), "</span><span>Total: ").concat(money(order.total), "</span></div>\n          <div class=\"actions\"><button class=\"secondary\" data-action=\"orderState\" data-id=\"").concat(order.id, "\">Estado</button><button class=\"secondary\" data-action=\"editOrderStatus\" data-id=\"").concat(order.id, "\">Editar</button><button class=\"success\" data-action=\"whatsapp\" data-id=\"").concat(order.id, "\">WhatsApp</button></div>\n        </article>"); }).join("") || "<p>No hay pedidos para mostrar.</p>", "</div>\n    </div>");
 }
 function ordersTable(orders, title) {
     return orderCards(orders, title, false);
@@ -948,9 +948,9 @@ function pendingScheduleTicketsHtml() {
     return '<aside class="pending-ticket-column"><div class="pending-ticket-header"><h3>Pendientes</h3><strong>'.concat(orders.length, '</strong></div>').concat(orders.map(compactOrderTicketHtml).join('') || '<p class="empty-mini">Sin pendientes</p>', '</aside>');
 }
 function compactCycleHtml(cycle) {
-    var machineLabel = cycle.machine || "Sin máquina";
-    var assignLabel = cycle.machine ? "<small class=\"assigned-flag\">ASIGNADO</small>" : "";
-    return '<button class="compact-cycle '.concat(cycle.machine ? '' : 'unassigned-cycle', '" draggable="true" data-drag-cycle data-id="').concat(cycle.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '" data-action="openCycleEdit"><strong>').concat(formatShortDateTime(cycle.start).slice(-5), '</strong><span>').concat(escapeHtml(machineLabel), '</span>').concat(assignLabel, '<em>').concat(escapeHtml(cyclePersonLabel(cycle)), '</em></button>');
+    var machineLabel = cycle.machine || (cycle.type === "Secado" ? "Requiere secadora" : cycle.type === "Lavado" ? "Requiere lavadora" : "Sin máquina");
+    var serviceLabel = cycle.order && !cycle.order.block ? '<small class="service-flag">'.concat(escapeHtml(serviceSummary(cycle.order)), '</small>') : "";
+    return '<button class="compact-cycle '.concat(cycle.machine ? '' : 'unassigned-cycle', '" draggable="true" data-drag-cycle data-id="').concat(cycle.order.id, '" data-cycle-id="').concat(escapeHtml(cycle.cycleId), '" data-action="openCycleEdit"><strong>').concat(formatShortDateTime(cycle.start).slice(-5), '</strong><span>').concat(escapeHtml(machineLabel), '</span>').concat(serviceLabel, '<em>').concat(escapeHtml(cyclePersonLabel(cycle)), '</em></button>');
 }
 function dailyScheduleSlots(date, slotMinutes) {
     var slots = [];
@@ -995,7 +995,6 @@ function renderSchedule() {
     html += "<div class=\"schedule-workspace\"><main class=\"schedule-main-board\">";
     html += "<div class=\"card schedule-simple-hero\"><div><p class=\"eyebrow-dark\">Turnos</p><h2>Máquinas de hoy</h2></div></div>";
     html += schedulePrimarySummary(prediction);
-    html += "<div class=\"card schedule-machine-overview simple-machine-panel\"><div class=\"simple-section-title\"><h3>Lavarropas</h3></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Lavado"; }), activeCycles) + "<div class=\"simple-section-title\"><h3>Secadoras</h3></div>" + machineBoard(machines.filter(function (machine) { return machine.type === "Secado"; }), activeCycles) + "</div>";
     html += scheduleDayAgendaHtml(calendarCycles, new Date(scheduleSelectedDate + "T00:00:00"));
     html += globalTurnHistoryHtml(calendarCycles);
     html += "<details class=\"card schedule-advanced-actions simple-advanced\"><summary><strong>Opciones manuales</strong></summary><div class=\"schedule-quick-actions simple-manual-actions\"><button class=\"secondary\" data-action=\"openMachineBlockModal\">Reservar máquina</button><button class=\"secondary\" data-action=\"openUnscheduledOrdersModal\">Pedidos sin máquina</button><button class=\"secondary\" data-action=\"openFreeSlotFinder\">Buscar libre</button></div></details>";
@@ -1336,13 +1335,7 @@ function isResourceAvailable(resourceType, machineNumber, startTime, endTime, cu
     return !machineConflicts(machineName, new Date(startTime), new Date(endTime), ignoreOrderId, ignoreCycleId).length;
 }
 function machineAvailabilityBoxes(startTime, endTime, currentScheduledTurnId) {
-    var washTotal = Number(state.settings.smallWashers || 0);
-    var dryTotal = Number(state.settings.dryers || 0);
-    var html = '<div class="machine-availability-row"><strong>Lavarropas</strong>';
-    for (var w = 1; w <= washTotal; w += 1) html += '<span class="machine-pill ' + (isResourceAvailable("Lavado", w, startTime, endTime, currentScheduledTurnId) ? 'free' : 'busy') + '">L ' + w + '</span>';
-    html += '</div><div class="machine-availability-row"><strong>Secadoras</strong>';
-    for (var d = 1; d <= dryTotal; d += 1) html += '<span class="machine-pill ' + (isResourceAvailable("Secado", d, startTime, endTime, currentScheduledTurnId) ? 'free' : 'busy') + '">S ' + d + '</span>';
-    return html + '</div>';
+    return "";
 }
 function openMachineAssignModal(orderId, cycleId) {
     var found = findOrderCycle(orderId, cycleId); if (!found) return;
@@ -1353,7 +1346,7 @@ function openMachineAssignModal(orderId, cycleId) {
         var total = type === "Secado" ? Number(state.settings.dryers || 0) : Number(state.settings.smallWashers || 0);
         var currentNumber = currentCycle && currentCycle.machine ? Number(String(currentCycle.machine).replace(/\D/g, "")) : 0;
         var currentId = currentCycle ? String(found.order.id) + ":" + String(currentCycle.cycleId) : "";
-        var opts = '<option value="">Sin asignar</option>';
+        var opts = '<option value="">' + (type === "Secado" ? "Requiere secadora" : "Requiere lavadora") + '</option>';
         for (var i=1;i<=total;i+=1) {
             var free = currentCycle ? isResourceAvailable(type, i, currentCycle.start, currentCycle.end, currentId) : true;
             opts += '<option value="'+i+'" '+(currentNumber===i?'selected':'')+' '+(free?'':'disabled')+'>'+i+(free?' (libre)':' (ocupada)')+'</option>';
@@ -1734,7 +1727,7 @@ function openOrderModal() {
         var orderId = nextId(state.orders);
         var location = data.location || nextFreeLocation();
         var total = orderItemsTotal(items);
-        var order = { id: orderId, number: "", clientId: Number(selectedClientId), serviceId: Number(primaryService.id), createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
+        var order = { id: orderId, number: "", clientId: Number(selectedClientId), serviceId: Number(primaryService.id), createdAt: createdAt, retrievedAt: "", estimate: schedule.estimate, cycles: schedule.cycles, status: "Pendiente", items: items, total: total, location: location, notes: data.notes, paymentStatus: data.paymentStatus, paymentMethod: data.paymentMethod };
         ensureOrderCycleIds(order);
         order.number = orderDisplayCode(order);
         state.orders.push(order);
@@ -1804,7 +1797,7 @@ function syncOrderPayment(order) {
     order.paymentSynced = true;
 }
 function orderHistoryRows(orders) {
-    return "<div class=\"history-list\">".concat(orders.map(function (order) { return "<article class=\"history-item\"><div><strong>".concat(escapeHtml(orderDisplayCode(order)), "</strong><small>").concat(formatDateTime(order.createdAt), " · ").concat(escapeHtml(order.status), "</small></div><div>").concat(escapeHtml(itemSummary(order)), "</div><div><strong>").concat(money(order.total), "</strong> · ").concat(escapeHtml(order.paymentStatus || "Pendiente"), " · ").concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), "</div><button class=\"secondary\" data-action=\"viewOrder\" data-id=\"").concat(order.id, "\">Ver</button></article>"); }).join("") || "<p>Este cliente todavía no tiene pedidos.</p>", "</div>");
+    return "<div class=\"history-list\">".concat(orders.map(function (order) { return "<article class=\"history-item\"><div><strong>".concat(escapeHtml(orderDisplayCode(order)), "</strong><small>Ingreso: ").concat(formatDateTime(order.createdAt), " · Retiro: ").concat(order.retrievedAt ? formatDateTime(order.retrievedAt) : "Pendiente", " · ").concat(escapeHtml(order.status), "</small></div><div>").concat(escapeHtml(itemSummary(order)), "</div><div><strong>").concat(money(order.total), "</strong> · ").concat(escapeHtml(order.paymentStatus || "Pendiente"), " · ").concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), "</div><button class=\"secondary\" data-action=\"viewOrder\" data-id=\"").concat(order.id, "\">Ver</button></article>"); }).join("") || "<p>Este cliente todavía no tiene pedidos.</p>", "</div>");
 }
 function openClientHistoryModal(id) {
     var client = getClient(id);
@@ -1814,7 +1807,7 @@ function openClientHistoryModal(id) {
     openModal("Historial de ".concat(escapeHtml(client.name)), orderHistoryRows(orders));
 }
 function orderDetailHtml(order) {
-    return '<div class="order-detail"><p><strong>Cliente:</strong> '.concat(escapeHtml(orderClient(order)), '</p><p><strong>Depósito:</strong> ').concat(escapeHtml(order.location || "Sin asignar"), '</p><p><strong>Estado:</strong> ').concat(escapeHtml(order.status), '</p><p><strong>Pago:</strong> ').concat(escapeHtml(order.paymentStatus || "Pendiente"), ' · ').concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), '</p><p><strong>Total:</strong> ').concat(money(order.total), '</p><p><strong>Estimado:</strong> ').concat(formatDateTime(order.estimate), '</p><h3>Prendas / trabajos</h3><ul>').concat((order.items || []).map(function (item) { return '<li>'.concat(Number(item.quantity || 1), ' x ').concat(escapeHtml(item.name), ' · ').concat(escapeHtml(item.serviceName || ""), ' · ').concat(money(itemLineTotal(item)), '</li>'); }).join(""), '</ul>').concat('<p><strong>Observaciones:</strong> ').concat(escapeHtml(order.notes || "Sin observaciones"), '</p><div class="actions"><button class="secondary" data-action="editOrderStatus" data-id="').concat(order.id, '">Editar</button><button class="success" data-action="whatsapp" data-id="').concat(order.id, '">WhatsApp</button></div></div>');
+    return '<div class="order-detail"><p><strong>Cliente:</strong> '.concat(escapeHtml(orderClient(order)), '</p><p><strong>Depósito:</strong> ').concat(escapeHtml(order.location || "Sin asignar"), '</p><p><strong>Estado:</strong> ').concat(escapeHtml(order.status), '</p><p><strong>Pago:</strong> ').concat(escapeHtml(order.paymentStatus || "Pendiente"), ' · ').concat(escapeHtml(paymentMethodLabel(order.paymentMethod)), '</p><p><strong>Total:</strong> ').concat(money(order.total), '</p><p><strong>Ingreso:</strong> ').concat(formatDateTime(order.createdAt), '</p><p><strong>Retiro:</strong> ').concat(order.retrievedAt ? formatDateTime(order.retrievedAt) : "Pendiente", '</p><h3>Prendas / trabajos</h3><ul>').concat((order.items || []).map(function (item) { return '<li>'.concat(Number(item.quantity || 1), ' x ').concat(escapeHtml(item.name), ' · ').concat(escapeHtml(item.serviceName || ""), ' · ').concat(money(itemLineTotal(item)), '</li>'); }).join(""), '</ul>').concat('<p><strong>Observaciones:</strong> ').concat(escapeHtml(order.notes || "Sin observaciones"), '</p><div class="actions"><button class="secondary" data-action="editOrderStatus" data-id="').concat(order.id, '">Editar</button><button class="success" data-action="whatsapp" data-id="').concat(order.id, '">WhatsApp</button></div></div>');
 }
 function openOrderViewModal(id) {
     var order = getOrder(id);
@@ -1856,6 +1849,10 @@ function openOrderStateModal(id) {
         var data = formDataToObject(form);
         var previousStatus = order.status;
         order.status = data.status;
+        if (order.status === "Retirado" && !order.retrievedAt)
+            order.retrievedAt = new Date().toISOString();
+        if (order.status !== "Retirado")
+            order.retrievedAt = "";
         if (order.status === "Retirado") {
             order.wasPaidBeforeRetired = order.paymentStatus === "Abonado";
             order.paymentStatus = "Abonado";
@@ -2097,7 +2094,7 @@ function importOrdersCsv(rows) {
         var orderId = nextId(state.orders);
         var location = csvValue(row, headers, ["deposito", "depósito", "location"]) || nextFreeLocation();
         var items = [{ name: itemName, quantity: quantity, serviceId: service.id, serviceName: service.name, price: price }];
-        var order = { id: orderId, number: "", clientId: client.id, serviceId: service.id, createdAt: createdAt, estimate: schedule.estimate, cycles: schedule.cycles, status: csvValue(row, headers, ["estado", "status"]) || "Pendiente", items: items, total: orderItemsTotal(items), location: location, notes: csvValue(row, headers, ["notas", "notes", "observaciones"]), paymentStatus: csvValue(row, headers, ["pago", "paymentstatus"]) || "Pendiente", paymentMethod: csvValue(row, headers, ["medio", "paymentmethod"]) || "Efectivo" };
+        var order = { id: orderId, number: "", clientId: client.id, serviceId: service.id, createdAt: createdAt, retrievedAt: "", estimate: schedule.estimate, cycles: schedule.cycles, status: csvValue(row, headers, ["estado", "status"]) || "Pendiente", items: items, total: orderItemsTotal(items), location: location, notes: csvValue(row, headers, ["notas", "notes", "observaciones"]), paymentStatus: csvValue(row, headers, ["pago", "paymentstatus"]) || "Pendiente", paymentMethod: csvValue(row, headers, ["medio", "paymentmethod"]) || "Efectivo" };
         ensureOrderCycleIds(order);
         order.number = orderDisplayCode(order);
         state.orders.push(order);
