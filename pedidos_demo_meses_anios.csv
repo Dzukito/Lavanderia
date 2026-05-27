@@ -1,0 +1,149 @@
+﻿cliente;telefono;prenda;cantidad;precio;estado;fecha_ingreso;fecha_retiro;pago;medio;deposito;notas
+Peluquería Roma;5491199990011;Secado;1;2800;Retirado;2023-01-20;2023-01-27;Abonado;Efectivo;;No usar suavizante
+Ana Martínez;5491123456789;Valet bolsa chica;1;4200;Retirado;2023-01-25;2023-01-30;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Federico Acosta;5491133334455;Acolchado 1 plaza;1;7500;Retirado;2023-02-09;2023-02-15;Abonado;Efectivo;;Retira autorizado
+Carlos Rodríguez;5491134567890;Acolchado 2 plazas;1;9800;Retirado;2023-02-21;2023-02-28;Abonado;Efectivo;;No usar suavizante
+Sofía Herrera;5491167890123;Camisas;7;1100;Retirado;2023-03-07;2023-03-13;Abonado;Transferencia;;Revisar manchas antes de lavar
+Juan Pérez;5491198765432;Lavado + secado;1;5200;Retirado;2023-03-13;2023-03-17;Abonado;Efectivo;;No usar suavizante
+Paula Medina;5491144445566;Secado;4;2800;Retirado;2023-03-23;2023-03-28;Abonado;Transferencia;;Separar ropa clara y oscura
+Café Los Pinos;5491120202020;Mantel;1;3100;Retirado;2023-03-24;2023-03-27;Abonado;Transferencia;;Separar ropa clara y oscura
+Ana Martínez;5491123456789;Ropa de trabajo;4;1900;Retirado;2023-04-04;2023-04-06;Abonado;Efectivo;;Retira autorizado
+Carolina Ruiz;5491166667788;Lavado común;1;3500;Retirado;2023-04-10;2023-04-17;Abonado;Transferencia;;Pedido de prueba para demo
+Consultorio Belgrano;5491101010101;Acolchado 2 plazas;3;9800;Retirado;2023-04-12;2023-04-14;Abonado;Transferencia;;Separar ropa clara y oscura
+Camila Suárez;5491122223344;Valet bolsa grande;1;6500;Retirado;2023-05-08;2023-05-12;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Martín Cabrera;5491155556677;Camisas;5;1100;Retirado;2023-05-15;2023-05-22;Abonado;Transferencia;;Revisar manchas antes de lavar
+Peluquería Roma;5491199990011;Fundas de almohada;7;900;Retirado;2023-05-24;2023-05-25;Abonado;Transferencia;;Retira autorizado
+Gimnasio Norte;5491188889900;Ropa de trabajo;4;1900;Retirado;2023-06-05;2023-06-12;Abonado;Transferencia;;Retira autorizado
+Café Los Pinos;5491120202020;Acolchado 1 plaza;1;7500;Retirado;2023-06-05;2023-06-08;Abonado;Transferencia;;
+Gimnasio Norte;5491188889900;Camisas;5;1100;Retirado;2023-06-12;2023-06-19;Abonado;Efectivo;;Separar ropa clara y oscura
+Ana Martínez;5491123456789;Ropa de trabajo;4;1900;Retirado;2023-07-05;2023-07-07;Abonado;Transferencia;;Retira autorizado
+Mateo Silva;5491178901234;Valet bolsa chica;1;4200;Retirado;2023-07-19;2023-07-20;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Nicolás Romero;5491190123456;Acolchado 2 plazas;4;9800;Retirado;2023-08-14;2023-08-18;Abonado;Transferencia;;Pedido de prueba para demo
+Peluquería Roma;5491199990011;Lavado común;1;3500;Retirado;2023-08-21;2023-08-25;Abonado;Efectivo;;Separar ropa clara y oscura
+Hotel Avenida;5491177778899;Ropa de trabajo;4;1900;Retirado;2023-09-04;2023-09-05;Abonado;Transferencia;;Retira autorizado
+Carlos Rodríguez;5491134567890;Lavado + secado;1;5200;Retirado;2023-09-11;2023-09-12;Abonado;Efectivo;;Pedido de prueba para demo
+Ana Martínez;5491123456789;Valet bolsa chica;2;4200;Retirado;2023-09-18;2023-09-20;Abonado;Transferencia;;No usar suavizante
+Sofía Herrera;5491167890123;Toallas;3;1800;Retirado;2023-09-19;2023-09-25;Abonado;Efectivo;;Revisar manchas antes de lavar
+Consultorio Belgrano;5491101010101;Lavado + secado;1;5200;Retirado;2023-09-25;2023-10-02;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Juan Pérez;5491198765432;Acolchado 2 plazas;1;9800;Retirado;2023-10-04;2023-10-06;Abonado;Efectivo;;Separar ropa clara y oscura
+Federico Acosta;5491133334455;Acolchado 2 plazas;1;9800;Retirado;2023-10-24;2023-10-25;Abonado;Efectivo;;Retira autorizado
+Peluquería Roma;5491199990011;Sábanas;2;2600;Retirado;2023-11-06;2023-11-09;Abonado;Efectivo;;Revisar manchas antes de lavar
+Ana Martínez;5491123456789;Sábanas;2;2600;Retirado;2023-11-20;2023-11-21;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Sofía Herrera;5491167890123;Fundas de almohada;4;900;Retirado;2023-12-04;2023-12-06;Abonado;Efectivo;;Revisar manchas antes de lavar
+Ana Martínez;5491123456789;Ropa de trabajo;4;1900;Retirado;2023-12-06;2023-12-11;Abonado;Transferencia;;Revisar manchas antes de lavar
+Lucía Fernández;5491145678901;Lavado + secado;1;5200;Retirado;2024-01-02;2024-01-08;Abonado;Efectivo;;Retira autorizado
+Paula Medina;5491144445566;Secado;3;2800;Retirado;2024-01-10;2024-01-15;Abonado;Transferencia;;Retira autorizado
+Camila Suárez;5491122223344;Valet bolsa chica;1;4200;Retirado;2024-01-16;2024-01-22;Abonado;Efectivo;;
+Juan Pérez;5491198765432;Toallas;3;1800;Retirado;2024-02-06;2024-02-07;Abonado;Efectivo;;Pedido de prueba para demo
+Mateo Silva;5491178901234;Acolchado 2 plazas;1;9800;Retirado;2024-02-19;2024-02-21;Abonado;Efectivo;;Pedido de prueba para demo
+Café Los Pinos;5491120202020;Valet bolsa grande;1;6500;Retirado;2024-02-19;2024-02-26;Abonado;Transferencia;;Pedido de prueba para demo
+Valentina Torres;5491189012345;Lavado + secado;1;5200;Retirado;2024-03-11;2024-03-13;Abonado;Transferencia;;No usar suavizante
+Lucía Fernández;5491145678901;Mantel;1;3100;Retirado;2024-03-15;2024-03-18;Abonado;Efectivo;;
+Gimnasio Norte;5491188889900;Secado;1;2800;Retirado;2024-04-12;2024-04-15;Abonado;Transferencia;;Separar ropa clara y oscura
+Nicolás Romero;5491190123456;Lavado común;1;3500;Retirado;2024-04-18;2024-04-24;Abonado;Efectivo;;No usar suavizante
+María Gómez;5491112345678;Sábanas;2;2600;Retirado;2024-04-19;2024-04-22;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Peluquería Roma;5491199990011;Secado;2;2800;Retirado;2024-05-06;2024-05-09;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Sofía Herrera;5491167890123;Mantel;1;3100;Retirado;2024-05-09;2024-05-14;Abonado;Transferencia;;Revisar manchas antes de lavar
+Juan Pérez;5491198765432;Valet bolsa grande;1;6500;Retirado;2024-05-09;2024-05-10;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Peluquería Roma;5491199990011;Lavado común;1;3500;Retirado;2024-05-20;2024-05-22;Abonado;Transferencia;;Retira autorizado
+Lucía Fernández;5491145678901;Mantel;2;3100;Retirado;2024-05-24;2024-05-28;Abonado;Transferencia;;Pedido de prueba para demo
+Federico Acosta;5491133334455;Ropa de trabajo;5;1900;Retirado;2024-06-12;2024-06-14;Abonado;Efectivo;;Retira autorizado
+Federico Acosta;5491133334455;Camisas;5;1100;Retirado;2024-06-14;2024-06-17;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Peluquería Roma;5491199990011;Valet bolsa chica;1;4200;Retirado;2024-06-24;2024-06-26;Abonado;Efectivo;;Pedido de prueba para demo
+Mateo Silva;5491178901234;Fundas de almohada;4;900;Retirado;2024-07-08;2024-07-12;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Carlos Rodríguez;5491134567890;Acolchado 1 plaza;1;7500;Retirado;2024-07-15;2024-07-22;Abonado;Efectivo;;Retira autorizado
+Diego López;5491156789012;Ropa de trabajo;4;1900;Retirado;2024-07-15;2024-07-22;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Mateo Silva;5491178901234;Lavado + secado;1;5200;Retirado;2024-07-15;2024-07-18;Abonado;Efectivo;;No usar suavizante
+Camila Suárez;5491122223344;Ropa de trabajo;7;1900;Retirado;2024-07-24;2024-07-31;Abonado;Transferencia;;Separar ropa clara y oscura
+María Gómez;5491112345678;Valet bolsa grande;3;6500;Retirado;2024-08-06;2024-08-12;Abonado;Efectivo;;No usar suavizante
+Mateo Silva;5491178901234;Valet bolsa chica;1;4200;Retirado;2024-08-13;2024-08-16;Abonado;Efectivo;;No usar suavizante
+Valentina Torres;5491189012345;Acolchado 1 plaza;1;7500;Retirado;2024-08-13;2024-08-19;Abonado;Transferencia;;
+Carlos Rodríguez;5491134567890;Camisas;5;1100;Retirado;2024-08-26;2024-09-02;Abonado;Transferencia;;No usar suavizante
+Martín Cabrera;5491155556677;Valet bolsa chica;1;4200;Retirado;2024-09-18;2024-09-24;Abonado;Efectivo;;Retira autorizado
+Café Los Pinos;5491120202020;Toallas;3;1800;Retirado;2024-09-19;2024-09-23;Abonado;Efectivo;;No usar suavizante
+Paula Medina;5491144445566;Cortinas livianas;2;4500;Retirado;2024-10-07;2024-10-09;Abonado;Transferencia;;Revisar manchas antes de lavar
+Carlos Rodríguez;5491134567890;Cortinas livianas;5;4500;Retirado;2024-10-10;2024-10-16;Abonado;Transferencia;;Revisar manchas antes de lavar
+Federico Acosta;5491133334455;Acolchado 2 plazas;1;9800;Retirado;2024-10-22;2024-10-25;Abonado;Transferencia;;Pedido de prueba para demo
+Carolina Ruiz;5491166667788;Sábanas;2;2600;Retirado;2024-11-07;2024-11-12;Abonado;Efectivo;;Revisar manchas antes de lavar
+Mateo Silva;5491178901234;Mantel;1;3100;Retirado;2024-11-07;2024-11-11;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Diego López;5491156789012;Camisas;5;1100;Retirado;2024-11-13;2024-11-18;Abonado;Efectivo;;
+Nicolás Romero;5491190123456;Secado;1;2800;Retirado;2024-11-19;2024-11-25;Abonado;Transferencia;;Retira autorizado
+Ana Martínez;5491123456789;Secado;1;2800;Retirado;2024-11-21;2024-11-26;Abonado;Efectivo;;No usar suavizante
+Consultorio Belgrano;5491101010101;Lavado + secado;1;5200;Retirado;2024-12-13;2024-12-17;Abonado;Efectivo;;Revisar manchas antes de lavar
+Martín Cabrera;5491155556677;Lavado + secado;1;5200;Retirado;2024-12-23;2024-12-30;Abonado;Efectivo;;Revisar manchas antes de lavar
+Mateo Silva;5491178901234;Sábanas;2;2600;Retirado;2024-12-25;2024-12-26;Abonado;Transferencia;;Revisar manchas antes de lavar
+Lucía Fernández;5491145678901;Mantel;1;3100;Retirado;2024-12-25;2025-01-01;Abonado;Efectivo;;
+Peluquería Roma;5491199990011;Lavado + secado;2;5200;Retirado;2025-01-15;2025-01-17;Abonado;Transferencia;;
+Peluquería Roma;5491199990011;Sábanas;5;2600;Retirado;2025-01-16;2025-01-20;Abonado;Efectivo;;No usar suavizante
+Valentina Torres;5491189012345;Ropa de trabajo;4;1900;Retirado;2025-01-16;2025-01-22;Abonado;Transferencia;;Separar ropa clara y oscura
+Gimnasio Norte;5491188889900;Toallas;3;1800;Retirado;2025-01-27;2025-01-31;Abonado;Transferencia;;Pedido de prueba para demo
+Carolina Ruiz;5491166667788;Valet bolsa grande;1;6500;Retirado;2025-02-10;2025-02-13;Abonado;Transferencia;;No usar suavizante
+Peluquería Roma;5491199990011;Valet bolsa grande;1;6500;Retirado;2025-02-10;2025-02-14;Abonado;Efectivo;;Retira autorizado
+Sofía Herrera;5491167890123;Valet bolsa grande;1;6500;Retirado;2025-02-11;2025-02-17;Abonado;Transferencia;;Revisar manchas antes de lavar
+Consultorio Belgrano;5491101010101;Acolchado 2 plazas;1;9800;Retirado;2025-03-12;2025-03-17;Abonado;Transferencia;;
+Juan Pérez;5491198765432;Lavado + secado;1;5200;Retirado;2025-03-13;2025-03-20;Abonado;Efectivo;;Pedido de prueba para demo
+Martín Cabrera;5491155556677;Toallas;3;1800;Retirado;2025-03-18;2025-03-25;Abonado;Efectivo;;Pedido de prueba para demo
+Paula Medina;5491144445566;Camisas;5;1100;Retirado;2025-04-01;2025-04-02;Abonado;Transferencia;;Retira autorizado
+Lucía Fernández;5491145678901;Fundas de almohada;4;900;Retirado;2025-04-02;2025-04-07;Abonado;Transferencia;;Revisar manchas antes de lavar
+Paula Medina;5491144445566;Cortinas livianas;2;4500;Retirado;2025-04-15;2025-04-17;Abonado;Efectivo;;Pedido de prueba para demo
+Hotel Avenida;5491177778899;Lavado + secado;1;5200;Retirado;2025-04-16;2025-04-17;Abonado;Transferencia;;Revisar manchas antes de lavar
+Valentina Torres;5491189012345;Fundas de almohada;4;900;Retirado;2025-05-01;2025-05-07;Abonado;Efectivo;;Pedido de prueba para demo
+Sofía Herrera;5491167890123;Sábanas;2;2600;Retirado;2025-05-26;2025-05-30;Abonado;Transferencia;;No usar suavizante
+Mateo Silva;5491178901234;Lavado + secado;1;5200;Retirado;2025-06-20;2025-06-23;Abonado;Efectivo;;Separar ropa clara y oscura
+Federico Acosta;5491133334455;Lavado + secado;1;5200;Retirado;2025-06-25;2025-07-01;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Hotel Avenida;5491177778899;Mantel;1;3100;Retirado;2025-07-07;2025-07-11;Abonado;Transferencia;;Retira autorizado
+Nicolás Romero;5491190123456;Valet bolsa grande;1;6500;Retirado;2025-07-10;2025-07-15;Abonado;Transferencia;;Retira autorizado
+Paula Medina;5491144445566;Cortinas livianas;2;4500;Retirado;2025-07-21;2025-07-28;Abonado;Efectivo;;
+Carlos Rodríguez;5491134567890;Cortinas livianas;2;4500;Retirado;2025-07-22;2025-07-28;Abonado;Efectivo;;
+Federico Acosta;5491133334455;Lavado común;1;3500;Retirado;2025-07-24;2025-07-30;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Ana Martínez;5491123456789;Toallas;3;1800;Retirado;2025-08-01;2025-08-08;Abonado;Transferencia;;Revisar manchas antes de lavar
+Consultorio Belgrano;5491101010101;Ropa de trabajo;4;1900;Retirado;2025-08-18;2025-08-22;Abonado;Transferencia;;Retira autorizado
+Carlos Rodríguez;5491134567890;Acolchado 2 plazas;4;9800;Retirado;2025-09-15;2025-09-22;Abonado;Transferencia;;Separar ropa clara y oscura
+Carolina Ruiz;5491166667788;Acolchado 2 plazas;1;9800;Retirado;2025-09-19;2025-09-22;Abonado;Efectivo;;No usar suavizante
+Diego López;5491156789012;Cortinas livianas;2;4500;Retirado;2025-09-22;2025-09-25;Abonado;Transferencia;;Pedido de prueba para demo
+Ana Martínez;5491123456789;Secado;2;2800;Retirado;2025-09-25;2025-09-29;Abonado;Transferencia;;Pedido de prueba para demo
+Peluquería Roma;5491199990011;Valet bolsa chica;1;4200;Retirado;2025-10-07;2025-10-08;Abonado;Transferencia;;Separar ropa clara y oscura
+Federico Acosta;5491133334455;Ropa de trabajo;4;1900;Retirado;2025-10-09;2025-10-14;Abonado;Transferencia;;Retira autorizado
+Camila Suárez;5491122223344;Valet bolsa chica;1;4200;Retirado;2025-10-13;2025-10-15;Abonado;Efectivo;;Revisar manchas antes de lavar
+Hotel Avenida;5491177778899;Toallas;3;1800;Retirado;2025-10-23;2025-10-27;Abonado;Transferencia;;Retira autorizado
+Carolina Ruiz;5491166667788;Ropa de trabajo;4;1900;Retirado;2025-11-10;2025-11-12;Abonado;Efectivo;;Revisar manchas antes de lavar
+Martín Cabrera;5491155556677;Cortinas livianas;2;4500;Retirado;2025-11-12;2025-11-18;Abonado;Transferencia;;Revisar manchas antes de lavar
+Nicolás Romero;5491190123456;Mantel;1;3100;Retirado;2025-11-17;2025-11-24;Abonado;Transferencia;;Pedido de prueba para demo
+Nicolás Romero;5491190123456;Secado;1;2800;Retirado;2025-11-24;2025-11-26;Abonado;Efectivo;;No usar suavizante
+Peluquería Roma;5491199990011;Ropa de trabajo;4;1900;Retirado;2025-12-08;2025-12-10;Abonado;Transferencia;;Retira autorizado
+Valentina Torres;5491189012345;Cortinas livianas;2;4500;Retirado;2025-12-25;2025-12-30;Abonado;Transferencia;;Pedido de prueba para demo
+Lucía Fernández;5491145678901;Mantel;3;3100;Retirado;2026-01-05;2026-01-12;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Hotel Avenida;5491177778899;Sábanas;2;2600;Retirado;2026-01-06;2026-01-07;Abonado;Transferencia;;No usar suavizante
+Carlos Rodríguez;5491134567890;Fundas de almohada;4;900;Retirado;2026-01-08;2026-01-12;Abonado;Transferencia;;Separar ropa clara y oscura
+María Gómez;5491112345678;Cortinas livianas;2;4500;Retirado;2026-01-09;2026-01-12;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Lucía Fernández;5491145678901;Lavado común;1;3500;Retirado;2026-01-12;2026-01-13;Abonado;Efectivo;;Separar ropa clara y oscura
+Gimnasio Norte;5491188889900;Acolchado 2 plazas;1;9800;Retirado;2026-01-15;2026-01-19;Abonado;Transferencia;;
+Carlos Rodríguez;5491134567890;Fundas de almohada;4;900;Retirado;2026-01-16;2026-01-19;Abonado;Efectivo;;Pedido de prueba para demo
+Peluquería Roma;5491199990011;Ropa de trabajo;4;1900;Retirado;2026-01-20;2026-01-27;Abonado;Efectivo;;Pedido de prueba para demo
+Gimnasio Norte;5491188889900;Toallas;3;1800;Retirado;2026-02-03;2026-02-09;Abonado;Transferencia;;Cliente pide aviso por WhatsApp
+Sofía Herrera;5491167890123;Secado;1;2800;Retirado;2026-02-06;2026-02-09;Abonado;Efectivo;;Separar ropa clara y oscura
+Ana Martínez;5491123456789;Mantel;1;3100;Retirado;2026-02-09;2026-02-16;Abonado;Efectivo;;
+Juan Pérez;5491198765432;Lavado + secado;1;5200;Retirado;2026-02-10;2026-02-16;Abonado;Transferencia;;
+Ana Martínez;5491123456789;Valet bolsa chica;1;4200;Retirado;2026-02-10;2026-02-16;Abonado;Transferencia;;Retira autorizado
+Carolina Ruiz;5491166667788;Valet bolsa grande;1;6500;Retirado;2026-02-10;2026-02-16;Abonado;Transferencia;;Revisar manchas antes de lavar
+Nicolás Romero;5491190123456;Camisas;5;1100;Retirado;2026-02-20;2026-02-26;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Diego López;5491156789012;Valet bolsa chica;1;4200;Retirado;2026-02-23;2026-03-02;Abonado;Transferencia;;Revisar manchas antes de lavar
+Martín Cabrera;5491155556677;Valet bolsa grande;1;6500;Retirado;2026-02-23;2026-02-25;Abonado;Efectivo;;No usar suavizante
+Camila Suárez;5491122223344;Camisas;5;1100;Retirado;2026-03-03;2026-03-05;Abonado;Efectivo;;Retira autorizado
+Camila Suárez;5491122223344;Acolchado 2 plazas;1;9800;Retirado;2026-03-10;2026-03-16;Abonado;Efectivo;;Revisar manchas antes de lavar
+Hotel Avenida;5491177778899;Acolchado 1 plaza;1;7500;Retirado;2026-03-11;2026-03-17;Abonado;Efectivo;;Cliente pide aviso por WhatsApp
+Valentina Torres;5491189012345;Lavado común;3;3500;Retirado;2026-03-23;2026-03-30;Abonado;Efectivo;;Revisar manchas antes de lavar
+Valentina Torres;5491189012345;Camisas;5;1100;Retirado;2026-03-25;2026-03-27;Abonado;Transferencia;;Revisar manchas antes de lavar
+Peluquería Roma;5491199990011;Acolchado 2 plazas;1;9800;Pendiente;2026-04-06;;Pendiente;Transferencia;A3;No usar suavizante
+Peluquería Roma;5491199990011;Sábanas;2;2600;Retirado;2026-04-07;2026-04-13;Abonado;Transferencia;;
+Carolina Ruiz;5491166667788;Toallas;3;1800;Retirado;2026-04-07;2026-04-13;Abonado;Efectivo;;Separar ropa clara y oscura
+Carolina Ruiz;5491166667788;Ropa de trabajo;4;1900;Retirado;2026-04-09;2026-04-14;Abonado;Transferencia;;No usar suavizante
+Carolina Ruiz;5491166667788;Valet bolsa grande;1;6500;Pendiente;2026-04-13;;Abonado;Efectivo;A1;Pedido de prueba para demo
+Nicolás Romero;5491190123456;Toallas;3;1800;Retirado;2026-04-14;2026-04-21;Abonado;Efectivo;;Revisar manchas antes de lavar
+Valentina Torres;5491189012345;Ropa de trabajo;4;1900;Pendiente;2026-04-14;;Abonado;Efectivo;A4;
+Hotel Avenida;5491177778899;Valet bolsa grande;1;6500;Listo;2026-04-21;;Pendiente;Efectivo;A2;Pedido de prueba para demo
+Carlos Rodríguez;5491134567890;Fundas de almohada;4;900;Pendiente;2026-05-04;;Abonado;Transferencia;B2;Separar ropa clara y oscura
+Paula Medina;5491144445566;Acolchado 2 plazas;4;9800;Pendiente;2026-05-05;;Abonado;Transferencia;B1;Pedido de prueba para demo
+Peluquería Roma;5491199990011;Sábanas;2;2600;Listo;2026-05-18;;Abonado;Efectivo;A6;No usar suavizante
+Nicolás Romero;5491190123456;Cortinas livianas;2;4500;Pendiente;2026-05-19;;Abonado;Transferencia;A5;Separar ropa clara y oscura
+Mateo Silva;5491178901234;Camisas;5;1100;Retirado;2026-05-25;2026-05-29;Abonado;Transferencia;;Retira autorizado
